@@ -246,5 +246,18 @@ impl Database {
         db_tx.commit().await?;
         Ok(())
     }
+
+    pub async fn get_stake(&self, wallet_id: Uuid) -> Result<f64, Box<dyn Error>> {
+        let row = sqlx::query(
+            "SELECT amount FROM stakes WHERE wallet_id = ?"
+        )
+        .bind(wallet_id.to_string())
+        .fetch_optional(&self.pool).await?;
+
+        match row {
+            Some(r) => Ok(r.try_get("amount")?),
+            None => Ok(0.0),
+        }
+    }
 }
 

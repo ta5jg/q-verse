@@ -137,6 +137,20 @@ pub async fn transfer(
     }
 }
 
+pub async fn get_stake_info(
+    db: web::Data<Database>,
+    path: web::Path<Uuid>
+) -> impl Responder {
+    let wallet_id = path.into_inner();
+    match db.get_stake(wallet_id).await {
+        Ok(amount) => HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "staked_amount": amount,
+            "rewards": amount * 0.05 // Mock reward calculation (5%)
+        }))),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
+    }
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/health").route(web::get().to(health_check))
@@ -146,6 +160,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
     .service(
         web::resource("/wallets/{id}/balance/{token}").route(web::get().to(get_balance))
+    )
+    .service(
+        web::resource("/wallets/{id}/stake").route(web::get().to(get_stake_info))
     )
     .service(
         web::resource("/transfer").route(web::post().to(transfer))
