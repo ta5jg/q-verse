@@ -13,6 +13,118 @@ pub enum TokenSymbol {
     QVRt   // Test/Treasury
 }
 
+impl TryFrom<String> for TokenSymbol {
+    type Error = String;
+
+    fn try_from(v: String) -> Result<Self, Self::Error> {
+        match v.as_str() {
+            "QVR" => Ok(TokenSymbol::QVR),
+            "RGLS" => Ok(TokenSymbol::RGLS),
+            "POPEO" => Ok(TokenSymbol::POPEO),
+            "QVRg" => Ok(TokenSymbol::QVRg),
+            "QVRt" => Ok(TokenSymbol::QVRt),
+            _ => Err(format!("Unknown token symbol: {}", v)),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum TokenType {
+    Governance,
+    Utility,
+    Stable,
+    Asset,
+    Test,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TokenMetadata {
+    pub symbol: TokenSymbol,
+    pub name: String,
+    pub description: String,
+    pub token_type: TokenType,
+    pub initial_supply: Option<f64>, // None for elastic/mint-on-demand
+    pub max_supply: Option<f64>,
+    pub decimals: u8,
+    pub quantum_enabled: bool,
+    pub is_mintable: bool,
+    pub is_burnable: bool,
+    pub is_freezable: bool,
+}
+
+impl TokenSymbol {
+    pub fn metadata(&self) -> TokenMetadata {
+        match self {
+            TokenSymbol::QVR => TokenMetadata {
+                symbol: TokenSymbol::QVR,
+                name: "Q-Verse Network Token".to_string(),
+                description: "Primary governance and network fee token.".to_string(),
+                token_type: TokenType::Governance,
+                initial_supply: Some(1_000_000_000.0),
+                max_supply: Some(1_000_000_000.0),
+                decimals: 18,
+                quantum_enabled: true,
+                is_mintable: false,
+                is_burnable: true,
+                is_freezable: false,
+            },
+            TokenSymbol::RGLS => TokenMetadata {
+                symbol: TokenSymbol::RGLS,
+                name: "Regilis".to_string(),
+                description: "Store of value token. Starts at $1.00.".to_string(),
+                token_type: TokenType::Utility,
+                initial_supply: Some(100_000_000.0),
+                max_supply: None, 
+                decimals: 18,
+                quantum_enabled: true,
+                is_mintable: false,
+                is_burnable: true,
+                is_freezable: true,
+            },
+            TokenSymbol::POPEO => TokenMetadata {
+                symbol: TokenSymbol::POPEO,
+                name: "Popeo Stablecoin".to_string(),
+                description: "Stablecoin pegged to $1.00.".to_string(),
+                token_type: TokenType::Stable,
+                initial_supply: None, // Minted on demand
+                max_supply: None,
+                decimals: 6,
+                quantum_enabled: true,
+                is_mintable: true,
+                is_burnable: true,
+                is_freezable: true,
+            },
+            TokenSymbol::QVRg => TokenMetadata {
+                symbol: TokenSymbol::QVRg,
+                name: "Q-Verse Gold".to_string(),
+                description: "Gold-backed digital asset.".to_string(),
+                token_type: TokenType::Asset,
+                initial_supply: None,
+                max_supply: None,
+                decimals: 18,
+                quantum_enabled: true,
+                is_mintable: true,
+                is_burnable: true,
+                is_freezable: false,
+            },
+            TokenSymbol::QVRt => TokenMetadata {
+                symbol: TokenSymbol::QVRt,
+                name: "Q-Verse Treasury".to_string(),
+                description: "Token for treasury operations and testing.".to_string(),
+                token_type: TokenType::Test,
+                initial_supply: Some(10_000_000_000.0),
+                max_supply: None,
+                decimals: 18,
+                quantum_enabled: true,
+                is_mintable: true,
+                is_burnable: true,
+                is_freezable: false,
+            },
+        }
+    }
+}
+
+
 impl ToString for TokenSymbol {
     fn to_string(&self) -> String {
         match self {
@@ -45,6 +157,25 @@ pub struct Wallet {
     pub created_at: DateTime<Utc>,
 }
 
+impl Wallet {
+    /// Creates a new Quantum-Secure Wallet
+    pub fn new(user_id: Uuid) -> (Self, String) {
+        let (pk, sk) = crate::crypto::QuantumCrypto::generate_keys();
+        // For simplicity in this stage, we assume address derivation succeeds
+        let address = crate::crypto::QuantumCrypto::derive_address(&pk).unwrap_or_else(|_| "INVALID".to_string());
+        
+        let wallet = Wallet {
+            id: Uuid::new_v4(),
+            user_id,
+            address,
+            public_key: pk,
+            created_at: Utc::now(),
+        };
+        
+        (wallet, sk)
+    }
+}
+
 // 💰 Balance Model
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Balance {
@@ -67,6 +198,56 @@ pub struct Transaction {
     pub signature: String,
     pub created_at: DateTime<Utc>,
 }
+
+impl Transaction {
+    /// Creates and signs a new transaction
+    pub fn new(
+        from_wallet: &Wallet, 
+        to_wallet_id: Uuid, 
+        token: TokenSymbol, 
+        amount: f64, 
+        fee: f64, 
+        secret_key: &str
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut tx = Transaction {
+            id: Uuid::new_v4(),
+            from_wallet_id: from_wallet.id,
+            to_wallet_id,
+            token_symbol: token.to_string(),
+            amount,
+            fee,
+            status: "PENDING".to_string(),
+            signature: String::new(), // Placeholder until signed
+            created_at: Utc::now(),
+        };
+        
+        // Sign the transaction data
+        let message = tx.get_signable_bytes();
+        let signature = crate::crypto::QuantumCrypto::sign_data(&message, secret_key)?;
+        tx.signature = signature;
+        
+        Ok(tx)
+    }
+    
+    /// Verifies the transaction signature
+    pub fn verify(&self, public_key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+         let message = self.get_signable_bytes();
+         crate::crypto::QuantumCrypto::verify_signature(&message, &self.signature, public_key)
+    }
+    
+    fn get_signable_bytes(&self) -> Vec<u8> {
+        // Concatenate relevant fields for signing
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(self.from_wallet_id.as_bytes());
+        bytes.extend_from_slice(self.to_wallet_id.as_bytes());
+        bytes.extend_from_slice(self.token_symbol.as_bytes());
+        bytes.extend_from_slice(&self.amount.to_be_bytes());
+        bytes.extend_from_slice(&self.fee.to_be_bytes());
+        bytes.extend_from_slice(self.id.as_bytes());
+        bytes
+    }
+}
+
 
 // 📡 API Responses
 #[derive(Debug, Serialize)]

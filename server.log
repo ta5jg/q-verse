@@ -1,0 +1,120 @@
+warning: unused import: `TokenSymbol`
+ --> src/contracts.rs:4:34
+  |
+4 | use crate::models::{Transaction, TokenSymbol};
+  |                                  ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `TokenSymbol`
+ --> src/db.rs:4:35
+  |
+4 | use crate::models::{User, Wallet, TokenSymbol};
+  |                                   ^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> src/api.rs:97:9
+   |
+97 |     let mut tx = match Transaction::new(
+   |         ----^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: trait `SmartContract` is never used
+ --> src/contracts.rs:7:11
+  |
+7 | pub trait SmartContract {
+  |           ^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: struct `ExecutionResult` is never constructed
+  --> src/contracts.rs:19:12
+   |
+19 | pub struct ExecutionResult {
+   |            ^^^^^^^^^^^^^^^
+
+warning: struct `StakingContract` is never constructed
+  --> src/contracts.rs:27:12
+   |
+27 | pub struct StakingContract {
+   |            ^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `stake`, and `distribute_rewards` are never used
+  --> src/contracts.rs:34:12
+   |
+33 | impl StakingContract {
+   | -------------------- associated items in this implementation
+34 |     pub fn new() -> Self {
+   |            ^^^
+...
+42 |     pub fn stake(&mut self, wallet_id: String, amount: f64) {
+   |            ^^^^^
+...
+47 |     pub fn distribute_rewards(&mut self) -> Vec<(String, f64)> {
+   |            ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `verify_signature` is never used
+  --> src/crypto.rs:42:12
+   |
+14 | impl QuantumCrypto {
+   | ------------------ associated function in this implementation
+...
+42 |     pub fn verify_signature(
+   |            ^^^^^^^^^^^^^^^^
+
+warning: method `set_balance` is never used
+   --> src/db.rs:109:18
+    |
+ 10 | impl Database {
+    | ------------- method in this implementation
+...
+109 |     pub async fn set_balance(&self, wallet_id: Uuid, token: &str, amount: f64) -> Result<(), Box<dyn Error>> {
+    |                  ^^^^^^^^^^^
+
+warning: enum `TokenType` is never used
+  --> src/models.rs:32:10
+   |
+32 | pub enum TokenType {
+   |          ^^^^^^^^^
+
+warning: struct `TokenMetadata` is never constructed
+  --> src/models.rs:41:12
+   |
+41 | pub struct TokenMetadata {
+   |            ^^^^^^^^^^^^^
+
+warning: method `metadata` is never used
+  --> src/models.rs:56:12
+   |
+55 | impl TokenSymbol {
+   | ---------------- method in this implementation
+56 |     pub fn metadata(&self) -> TokenMetadata {
+   |            ^^^^^^^^
+
+warning: struct `Balance` is never constructed
+   --> src/models.rs:181:12
+    |
+181 | pub struct Balance {
+    |            ^^^^^^^
+
+warning: method `verify` is never used
+   --> src/models.rs:233:12
+    |
+202 | impl Transaction {
+    | ---------------- method in this implementation
+...
+233 |     pub fn verify(&self, public_key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    |            ^^^^^^
+
+warning: `q-verse-core` (bin "q-verse-core") generated 14 warnings (run `cargo fix --bin "q-verse-core"` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running `target/debug/q-verse-core`
+🌌 Q-Verse Core: Quantum-Safe Hybrid Finance Network
+🌌 Q-Verse Core: Quantum-Safe Hybrid Finance Network
+---------------------------------------------------
+🔌 Connecting to Ledger...
+🚀 Starting API Server at http://127.0.0.1:8080
+Error: Os { code: 48, kind: AddrInUse, message: "Address already in use" }
