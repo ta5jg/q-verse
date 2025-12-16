@@ -202,6 +202,8 @@ impl Database {
 
         db_tx.commit().await?;
         Ok(())
+    }
+
     /// Executes a Staking Transaction (Balance Decrement -> Stake Increment)
     pub async fn stake_tokens(
         &self,
