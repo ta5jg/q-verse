@@ -34,6 +34,7 @@ export default function Navbar() {
     ],
     Network: [
       { name: "System Status", href: "/system/status" },
+      { name: "Metrics", href: "/system/metrics" },
       { name: "Bridge", href: "/network/bridge" },
       { name: "Explorer", href: "/network/explorer" },
       { name: "Oracles", href: "/network/oracles" },
@@ -47,6 +48,7 @@ export default function Navbar() {
     Developers: [
         { name: "IDE", href: "/dev/ide" },
         { name: "Formal Verification", href: "/dev/verification" },
+        { name: "API Docs", href: "/developers/api-docs" },
         { name: "Docs", href: "/developers" },
         { name: "Whitepaper", href: "/whitepaper" }
     ],
