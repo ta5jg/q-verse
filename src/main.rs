@@ -20,8 +20,9 @@ mod cache;
 mod metrics;
 mod batch;
 mod websocket;
+mod openapi;
 
-use actix_web::{web, App, HttpServer, middleware::Logger};
+use actix_web::{web, App, HttpServer, middleware::Logger, middleware::Compress};
 use db::Database;
 use actix_cors::Cors;
 use std::sync::{Arc, Mutex};
@@ -132,6 +133,7 @@ async fn main() -> std::io::Result<()> {
         };
 
         App::new()
+            .wrap(Compress::default())
             .wrap(Logger::default())
             .wrap(SecurityHeadersMiddleware)
             .wrap(RequestIdMiddleware)
@@ -141,6 +143,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.cache.clone()))
             .app_data(web::Data::new(app_state.metrics.clone()))
             .app_data(web::Data::new(app_state.rate_limiter.clone()))
+            .service(openapi::swagger_ui())
             .configure(api::config)
     })
     .bind(&bind_addr)?

@@ -269,6 +269,14 @@ pub async fn stake(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Service is healthy", body = serde_json::Value)
+    )
+)]
 pub async fn health_check(
     metrics: web::Data<Metrics>
 ) -> impl Responder {
@@ -506,12 +514,8 @@ pub async fn verify_iso20022(
 
 pub async fn swap_tokens(
     db: web::Data<Database>,
-    metrics: web::Data<Metrics>,
-    cache: web::Data<CacheManager>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
-    let start = Instant::now();
-    metrics.increment_requests();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
@@ -586,10 +590,19 @@ pub async fn swap_tokens(
     log::info!("Swap calculated: {} {} -> {} {} (price impact: {:.2}%)", 
         req.amount_in, req.token_in, amount_out, req.token_out, price_impact);
     
+    let response_time = start.elapsed().as_millis() as u64;
+    metrics.record_response_time(response_time);
+    metrics.increment_success();
+    metrics.increment_swaps();
+    
+    // Invalidate cache
+    cache.pools.remove("all_pools").await;
+    
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "amount_out": amount_out,
         "price_impact": price_impact,
-        "fee": req.amount_in * 0.003
+        "fee": req.amount_in * 0.003,
+        "response_time_ms": response_time
     })))
 }
 
