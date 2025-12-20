@@ -1770,142 +1770,144 @@ pub async fn batch_swap(
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::resource("/health").route(web::get().to(health_check))
-    )
-    .service(
-        web::resource("/users").route(web::post().to(create_user))
-    )
-    .service(
-        web::resource("/wallets/{id}/balance/{token}").route(web::get().to(get_balance))
-    )
-    .service(
-        web::resource("/wallets/{id}/stake").route(web::get().to(get_stake_info))
-    )
-    .service(
-        web::resource("/wallets/{id}/transactions").route(web::get().to(get_transactions))
-    )
-    .service(
-        web::resource("/transfer").route(web::post().to(transfer))
-    )
-    .service(
-        web::resource("/stake").route(web::post().to(stake))
-    )
-    // Network & VM Routes
-    .service(
-        web::resource("/network/status").route(web::get().to(get_network_status))
-    )
-    .service(
-        web::resource("/contracts/execute").route(web::post().to(execute_contract))
-    )
-    .service(
-        web::resource("/compliance/iso20022").route(web::post().to(verify_iso20022))
-    )
-    .service(
-        web::resource("/ai/analyze").route(web::post().to(analyze_tx))
-    )
-    // Exchange Routes
-    .service(
-        web::resource("/exchange/swap").route(web::post().to(swap_tokens))
-    )
-    .service(
-        web::resource("/exchange/pools").route(web::get().to(get_liquidity_pools))
-    )
-    .service(
-        web::resource("/exchange/orders").route(web::post().to(create_order))
-    )
-    .service(
-        web::resource("/exchange/orderbook/{pair}").route(web::get().to(get_orderbook))
-    )
-    // Bridge Routes
-    .service(
-        web::resource("/bridge/transfer").route(web::post().to(bridge_assets))
-    )
-    // Explorer Routes
-    .service(
-        web::resource("/explorer/block/{number}").route(web::get().to(get_block))
-    )
-    .service(
-        web::resource("/explorer/search").route(web::get().to(search_explorer))
-    )
-    // Oracle Routes
-    .service(
-        web::resource("/oracle/price/{token}").route(web::get().to(get_price))
-    )
-    .service(
-        web::resource("/oracle/update").route(web::post().to(update_price))
-    )
-    // Governance Routes
-    .service(
-        web::resource("/governance/proposals").route(web::get().to(get_proposals))
-    )
-    .service(
-        web::resource("/governance/proposal").route(web::post().to(create_proposal))
-    )
-    .service(
-        web::resource("/governance/vote").route(web::post().to(vote_proposal))
-    )
-    // Yield Farming Routes
-    .service(
-        web::resource("/yield/pools").route(web::get().to(get_yield_pools))
-    )
-    .service(
-        web::resource("/yield/stake").route(web::post().to(stake_yield))
-    )
-    // Airdrop Routes
-    .service(
-        web::resource("/airdrop/claim").route(web::post().to(claim_airdrop))
-    )
-    // Wallet Enhancement Routes
-    .service(
-        web::resource("/wallet/multisig/create").route(web::post().to(create_multisig))
-    )
-    .service(
-        web::resource("/wallet/multisig/sign").route(web::post().to(sign_multisig))
-    )
-    .service(
-        web::resource("/wallet/payment/create").route(web::post().to(create_payment_request))
-    )
-    .service(
-        web::resource("/wallet/qr/scan").route(web::post().to(scan_qr_code))
-    )
-    // Developer Tools Routes
-    .service(
-        web::resource("/dev/compile").route(web::post().to(compile_contract))
-    )
-    .service(
-        web::resource("/dev/verify").route(web::post().to(verify_contract))
-    )
-    .service(
-        web::resource("/dev/deploy").route(web::post().to(deploy_contract))
-    )
-    .service(
-        web::resource("/dev/sdk").route(web::post().to(generate_sdk))
-    )
-    // Mobile Integration Routes
-    .service(
-        web::resource("/mobile/device/register").route(web::post().to(register_device))
-    )
-    .service(
-        web::resource("/mobile/notification/send").route(web::post().to(send_notification))
-    )
-    .service(
-        web::resource("/mobile/biometric/enable").route(web::post().to(enable_biometric))
-    )
-    .service(
-        web::resource("/mobile/biometric/verify").route(web::post().to(verify_biometric))
-    )
-    // Batch Operations Routes
-    .service(
-        web::resource("/batch/transfer").route(web::post().to(batch_transfer))
-    )
-    .service(
-        web::resource("/batch/swap").route(web::post().to(batch_swap))
-    )
-    // Metrics Routes
-    .service(
-        web::resource("/metrics").route(web::get().to(get_metrics))
-    )
-    // WebSocket Route
+        web::scope("/api")
+            .service(
+                web::resource("/health").route(web::get().to(health_check))
+            )
+            .service(
+                web::resource("/metrics").route(web::get().to(get_metrics))
+            )
+            .service(
+                web::resource("/users").route(web::post().to(create_user))
+            )
+            .service(
+                web::resource("/wallets/{id}/balance/{token}").route(web::get().to(get_balance))
+            )
+            .service(
+                web::resource("/wallets/{id}/stake").route(web::get().to(get_stake_info))
+            )
+            .service(
+                web::resource("/wallets/{id}/transactions").route(web::get().to(get_transactions))
+            )
+            .service(
+                web::resource("/transfer").route(web::post().to(transfer))
+            )
+            .service(
+                web::resource("/stake").route(web::post().to(stake))
+            )
+            // Network & VM Routes
+            .service(
+                web::resource("/network/status").route(web::get().to(get_network_status))
+            )
+            .service(
+                web::resource("/contracts/execute").route(web::post().to(execute_contract))
+            )
+            .service(
+                web::resource("/compliance/iso20022").route(web::post().to(verify_iso20022))
+            )
+            .service(
+                web::resource("/ai/analyze").route(web::post().to(analyze_tx))
+            )
+            // Exchange Routes
+            .service(
+                web::resource("/exchange/swap").route(web::post().to(swap_tokens))
+            )
+            .service(
+                web::resource("/exchange/pools").route(web::get().to(get_liquidity_pools))
+            )
+            .service(
+                web::resource("/exchange/orders").route(web::post().to(create_order))
+            )
+            .service(
+                web::resource("/exchange/orderbook/{pair}").route(web::get().to(get_orderbook))
+            )
+            // Bridge Routes
+            .service(
+                web::resource("/bridge/transfer").route(web::post().to(bridge_assets))
+            )
+            // Explorer Routes
+            .service(
+                web::resource("/explorer/block/{number}").route(web::get().to(get_block))
+            )
+            .service(
+                web::resource("/explorer/search").route(web::get().to(search_explorer))
+            )
+            // Oracle Routes
+            .service(
+                web::resource("/oracle/price/{token}").route(web::get().to(get_price))
+            )
+            .service(
+                web::resource("/oracle/update").route(web::post().to(update_price_feed))
+            )
+            // Governance Routes
+            .service(
+                web::resource("/governance/proposals").route(web::get().to(get_proposals))
+            )
+            .service(
+                web::resource("/governance/proposal").route(web::post().to(create_proposal))
+            )
+            .service(
+                web::resource("/governance/vote").route(web::post().to(vote_proposal))
+            )
+            // Yield Farming Routes
+            .service(
+                web::resource("/yield/pools").route(web::get().to(get_yield_pools))
+            )
+            .service(
+                web::resource("/yield/stake").route(web::post().to(stake_yield))
+            )
+            // Airdrop Routes
+            .service(
+                web::resource("/airdrop/claim").route(web::post().to(claim_airdrop))
+            )
+            // Wallet Enhancement Routes
+            .service(
+                web::resource("/wallets/multisig/create").route(web::post().to(create_multisig_wallet))
+            )
+            .service(
+                web::resource("/wallets/multisig/sign").route(web::post().to(sign_multisig_transaction))
+            )
+            .service(
+                web::resource("/wallets/payment/create").route(web::post().to(create_payment_request))
+            )
+            .service(
+                web::resource("/wallets/payment/scan").route(web::post().to(scan_qr_code))
+            )
+            // Developer Tools Routes
+            .service(
+                web::resource("/dev/compile").route(web::post().to(compile_contract))
+            )
+            .service(
+                web::resource("/dev/verify").route(web::post().to(verify_contract))
+            )
+            .service(
+                web::resource("/dev/deploy").route(web::post().to(deploy_contract))
+            )
+            .service(
+                web::resource("/dev/sdk").route(web::post().to(generate_sdk))
+            )
+            // Mobile Integration Routes
+            .service(
+                web::resource("/mobile/device/register").route(web::post().to(register_device))
+            )
+            .service(
+                web::resource("/mobile/notification/send").route(web::post().to(send_notification))
+            )
+            .service(
+                web::resource("/mobile/biometric/enable").route(web::post().to(enable_biometric))
+            )
+            .service(
+                web::resource("/mobile/biometric/verify").route(web::post().to(verify_biometric))
+            )
+            // Batch Operations Routes
+            .service(
+                web::resource("/batch/transfer").route(web::post().to(batch_transfer))
+            )
+            .service(
+                web::resource("/batch/swap").route(web::post().to(batch_swap))
+            )
+        )
+    // WebSocket Route (outside /api scope)
     .service(
         web::resource("/ws").route(web::get().to(crate::websocket::websocket_handler))
     );
