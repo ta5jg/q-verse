@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🌌 Installing Q-Verse Core (Quantum-Safe Hybrid Network)..."
+echo "🌌 Installing Q-Verse Core (Quantum-Safe Hybrid Network)..." >> /var/log/qverse_install.log
 
 # 1. System Dependencies
 if command -v apt-get &> /dev/null; then
@@ -11,7 +11,7 @@ if command -v apt-get &> /dev/null; then
 fi
 
 # 2. Database Setup (PostgreSQL)
-echo "💾 Configuring PostgreSQL..."
+echo "💾 Configuring PostgreSQL..." >> /var/log/qverse_install.log
 # Create user if not exists
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='qverse_user'" | grep -q 1; then
     sudo -u postgres psql -c "CREATE USER qverse_user WITH PASSWORD 'quantum_secure_password_CHANGE_THIS';"
@@ -24,22 +24,22 @@ DB_URL="postgres://qverse_user:quantum_secure_password_CHANGE_THIS@localhost/qve
 
 # 3. Rust Installation
 if ! command -v cargo &> /dev/null; then
-    echo "🦀 Installing Rust..."
+    echo "🦀 Installing Rust..." >> /var/log/qverse_install.log
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     source "$HOME/.cargo/env"
 else
-    echo "Rust already installed."
+    echo "Rust already installed." >> /var/log/qverse_install.log
     source "$HOME/.cargo/env"
 fi
 
 # 4. Cleanup Old Processes
-echo "🧹 Cleaning up old processes..."
+echo "🧹 Cleaning up old processes..." >> /var/log/qverse_install.log
 systemctl stop q-verse-core || true
 pkill -9 q-verse-core || true
 fuser -k 8080/tcp || true
 
 # 5. Build Application
-echo "🛠 Building Q-Verse Core..."
+echo "🛠 Building Q-Verse Core..." >> /var/log/qverse_install.log
 mkdir -p /opt/q-verse
 if [ -d "/tmp/qverse_upload" ]; then
     cp -r /tmp/qverse_upload/* /opt/q-verse/
@@ -48,18 +48,18 @@ fi
 cd /opt/q-verse
 # Ensure Cargo.toml is present before building
 if [ ! -f "Cargo.toml" ]; then
-    echo "❌ Error: Cargo.toml not found in /opt/q-verse"
+    echo "❌ Error: Cargo.toml not found in /opt/q-verse" >> /var/log/qverse_install.log
     exit 1
 fi
 
 cargo clean
-cargo build --release
+cargo build --release >> /var/log/qverse_install.log 2>&1
 
 # Install binary
 cp target/release/q-verse-core /usr/local/bin/q-verse-core
 
 # 6. Systemd Service Setup
-echo "⚙️ Configuring Systemd Service..."
+echo "⚙️ Configuring Systemd Service..." >> /var/log/qverse_install.log
 cat > /etc/systemd/system/q-verse-core.service <<SERVICE
 [Unit]
 Description=Q-Verse Core (Quantum-Safe Hybrid Network)
@@ -76,10 +76,6 @@ RestartSec=5
 Environment="RUST_LOG=info"
 Environment="PORT=8080"
 Environment="DATABASE_URL=${DB_URL}"
-# Important: Set to use Postgres for production if code supports it switch, 
-# or ensure SQLite file path is absolute if using SQLite. 
-# For this deployment we assume the code will default to SQLite if DATABASE_URL isn't fully used or configured.
-# If using SQLite in production, ensure the db file persists.
 
 [Install]
 WantedBy=multi-user.target
@@ -90,4 +86,4 @@ systemctl daemon-reload
 systemctl enable q-verse-core
 systemctl restart q-verse-core
 
-echo "✅ Q-Verse Core Successfully Deployed & Running!"
+echo "✅ Q-Verse Core Successfully Deployed & Running!" >> /var/log/qverse_install.log

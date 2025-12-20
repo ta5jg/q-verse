@@ -16,52 +16,62 @@ else
     exit 1
 fi
 
-echo "🚀 Deploying Q-Verse Frontend (Next.js) to Droplets..."
+echo "🚀 Deploying Q-Verse Frontend (Server Build Optimization)..."
 
 # 1. Prepare Remote Install Script
 cat << 'INSTALL_SCRIPT' > scripts/deployment/install_qverse_web.sh
 #!/bin/bash
 set -e
 
-echo "🌐 Installing Q-Verse Web..."
+echo "🌐 Installing Q-Verse Web..." >> /var/log/qverse_web_install.log
 
-# 1. Install Node.js (Force Upgrade to v20) & PM2
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-apt-get install -y nodejs
-
+# Install PM2 if missing
 if ! command -v pm2 &> /dev/null; then
     npm install -g pm2
 fi
 
-# 2. Setup App Directory
+# Setup Dir
 mkdir -p /opt/q-verse-web
+
+# Move files
 if [ -d "/tmp/qverse_web_upload" ]; then
-    rsync -av /tmp/qverse_web_upload/ /opt/q-verse-web/
+    rm -rf /opt/q-verse-web/.next
+    # Don't delete public if not uploaded to save bandwidth, but here we wipe clean to be safe
+    # Actually, we should sync source code
+    
+    # Sync source files
+    cp -r /tmp/qverse_web_upload/* /opt/q-verse-web/
 fi
 
 cd /opt/q-verse-web
 
-# 3. Install & Build
-echo "📦 Installing Dependencies..."
-npm install --omit=dev # Install prod deps
-npm install --save-dev typescript @types/node @types/react @types/react-dom eslint eslint-config-next # Ensure build deps exist
-npm run build
+# Install Deps (Legacy Peer Deps for React 19 compat)
+echo "📦 Installing Dependencies..." >> /var/log/qverse_web_install.log
+rm -rf node_modules package-lock.json .next
+npm install --legacy-peer-deps
 
-# 4. Start with PM2
-echo "🚀 Starting Web Server..."
+# Build with RAM Limit
+echo "🛠 Building..." >> /var/log/qverse_web_install.log
+export NODE_OPTIONS="--max-old-space-size=4096"
+npm run build >> /var/log/qverse_web_install.log 2>&1
+
+# Fix Permissions
+chmod -R 755 /opt/q-verse-web
+
+# Start App
+echo "🚀 Starting App..." >> /var/log/qverse_web_install.log
 pm2 delete q-verse-web || true
 pm2 start npm --name "q-verse-web" -- start -- -p 3000
 pm2 save
-pm2 startup | bash || true # Ensure it runs on boot
+pm2 startup | bash || true
 
-# 5. Nginx Configuration
-echo "⚙️ Configuring Nginx for q-verse.org..."
-
-# Create config if not exists or update it
+# Nginx Config
+rm -f /etc/nginx/sites-enabled/default
 cat > /etc/nginx/sites-available/q-verse.org <<NGINX
 server {
-    listen 80;
-    server_name q-verse.org www.q-verse.org;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name q-verse.org www.q-verse.org 159.203.83.98;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -71,8 +81,7 @@ server {
         proxy_set_header Host \$host;
         proxy_cache_bypass \$http_upgrade;
     }
-
-    # API Proxy (optional if frontend calls API via public URL, but good to have)
+    
     location /api/ {
         proxy_pass http://localhost:8080/; 
         proxy_set_header Host \$host;
@@ -81,17 +90,13 @@ server {
 }
 NGINX
 
-# Enable Site
 ln -sf /etc/nginx/sites-available/q-verse.org /etc/nginx/sites-enabled/
-# Ensure usdtgverse.com is still enabled if it exists
-if [ -f /etc/nginx/sites-available/usdtgverse.com ]; then
-    ln -sf /etc/nginx/sites-available/usdtgverse.com /etc/nginx/sites-enabled/
-fi
-
-# Test & Reload
 nginx -t && systemctl reload nginx
 
-echo "✅ Q-Verse Web Deployed & Nginx Configured!"
+# SSL
+certbot --nginx -d q-verse.org -d www.q-verse.org --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall || true
+
+echo "✅ Q-Verse Live!" >> /var/log/qverse_web_install.log
 INSTALL_SCRIPT
 
 chmod +x scripts/deployment/install_qverse_web.sh
@@ -100,27 +105,26 @@ chmod +x scripts/deployment/install_qverse_web.sh
 for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
     IFS=':' read -r name ip <<< "$server"
     echo "----------------------------------------"
-    echo "📦 Deploying Frontend to $name ($ip)..."
+    echo "📦 Uploading Source Code to $name ($ip)..."
     
-    # Check connection
     if ! ssh -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$SSH_USER@$ip" echo "OK" &> /dev/null; then
-        echo "⚠️ Skipping $name (Connection failed)"
+        echo "⚠️ Skipping $name"
         continue
     fi
 
-    # Upload Code (Exclude node_modules and .next to save bandwidth/time)
+    # Clean Temp
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "rm -rf /tmp/qverse_web_upload && mkdir -p /tmp/qverse_web_upload"
     
-    rsync -av -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" --exclude 'node_modules' --exclude '.next' --exclude '.git' q-verse-web/ "$SSH_USER@$ip":/tmp/qverse_web_upload/
+    # Upload Source (Exclude heavy folders)
+    rsync -avz -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" --exclude 'node_modules' --exclude '.next' --exclude '.git' q-verse-web/ "$SSH_USER@$ip":/tmp/qverse_web_upload/
     
-    # Upload Install Script
     scp -i "$SSH_KEY" -o StrictHostKeyChecking=no scripts/deployment/install_qverse_web.sh "$SSH_USER@$ip":/tmp/install_qverse_web.sh
     
-    # Run Install Script
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "chmod +x /tmp/install_qverse_web.sh && /tmp/install_qverse_web.sh"
+    # Run Install Script IN BACKGROUND
+    echo "⚡ Starting Server Build on $name..."
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "chmod +x /tmp/install_qverse_web.sh && nohup /tmp/install_qverse_web.sh > /var/log/qverse_web_launcher.log 2>&1 &"
     
-    echo "✅ $name Frontend deployment complete."
+    echo "✅ $name deployment triggered."
 done
 
-echo "🎉 Frontend Deployment Finished!"
-
+echo "🎉 Deployment Triggered! (Check logs on server)"

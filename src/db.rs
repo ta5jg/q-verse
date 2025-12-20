@@ -3,8 +3,9 @@ use std::error::Error;
 use uuid::Uuid;
 use crate::models::{User, Wallet, TokenSymbol};
 
+#[derive(Clone)] // Added Clone derive
 pub struct Database {
-    pool: Pool<Sqlite>,
+    pub pool: Pool<Sqlite>,
 }
 
 impl Database {
@@ -16,7 +17,8 @@ impl Database {
         
         Ok(Self { pool })
     }
-
+    // ... rest of the file (init_schema, helper methods) remains the same ...
+    
     /// Initializes the database schema
     pub async fn init_schema(&self) -> Result<(), Box<dyn Error>> {
         // Users Table
@@ -75,6 +77,378 @@ impl Database {
                 rewards_accrued REAL DEFAULT 0.0,
                 staked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (wallet_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Exchange: Liquidity Pools
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS liquidity_pools (
+                id TEXT PRIMARY KEY,
+                token_a TEXT NOT NULL,
+                token_b TEXT NOT NULL,
+                reserve_a REAL DEFAULT 0.0,
+                reserve_b REAL DEFAULT 0.0,
+                total_supply REAL DEFAULT 0.0,
+                fee_rate REAL DEFAULT 0.003,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Exchange: Orders (Limit Orders)
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS orders (
+                id TEXT PRIMARY KEY,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                pair TEXT NOT NULL,
+                side TEXT NOT NULL,
+                order_type TEXT NOT NULL,
+                price REAL NOT NULL,
+                amount REAL NOT NULL,
+                filled REAL DEFAULT 0.0,
+                status TEXT DEFAULT 'PENDING',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Exchange: Trades
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS trades (
+                id TEXT PRIMARY KEY,
+                order_id TEXT REFERENCES orders(id),
+                pair TEXT NOT NULL,
+                price REAL NOT NULL,
+                amount REAL NOT NULL,
+                side TEXT NOT NULL,
+                maker_wallet_id TEXT REFERENCES wallets(id),
+                taker_wallet_id TEXT REFERENCES wallets(id),
+                fee REAL DEFAULT 0.0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Bridge: Cross-Chain Transactions
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS bridge_transactions (
+                id TEXT PRIMARY KEY,
+                source_chain TEXT NOT NULL,
+                target_chain TEXT NOT NULL,
+                source_tx_hash TEXT,
+                target_tx_hash TEXT,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                token_symbol TEXT NOT NULL,
+                amount REAL NOT NULL,
+                status TEXT DEFAULT 'PENDING',
+                validator_signatures TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME
+            );"
+        ).execute(&self.pool).await?;
+
+        // Bridge: Validators
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS bridge_validators (
+                id TEXT PRIMARY KEY,
+                address TEXT NOT NULL UNIQUE,
+                public_key TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                reputation_score REAL DEFAULT 100.0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Explorer: Blocks
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS blocks (
+                id TEXT PRIMARY KEY,
+                block_number INTEGER NOT NULL UNIQUE,
+                block_hash TEXT NOT NULL UNIQUE,
+                previous_hash TEXT,
+                validator_id TEXT,
+                transaction_count INTEGER DEFAULT 0,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                merkle_root TEXT
+            );"
+        ).execute(&self.pool).await?;
+
+        // Explorer: Block Transactions (Index)
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS block_transactions (
+                block_id TEXT NOT NULL REFERENCES blocks(id),
+                transaction_id TEXT NOT NULL REFERENCES transactions(id),
+                index_in_block INTEGER NOT NULL,
+                PRIMARY KEY (block_id, transaction_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Oracle: Price Feeds
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS price_feeds (
+                id TEXT PRIMARY KEY,
+                token_symbol TEXT NOT NULL,
+                price REAL NOT NULL,
+                source TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                is_verified BOOLEAN DEFAULT FALSE
+            );"
+        ).execute(&self.pool).await?;
+
+        // Oracle: Aggregated Prices
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS aggregated_prices (
+                token_symbol TEXT PRIMARY KEY,
+                price REAL NOT NULL,
+                sources_count INTEGER DEFAULT 0,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+                price_change_24h REAL DEFAULT 0.0
+            );"
+        ).execute(&self.pool).await?;
+
+        // Governance: Proposals
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS proposals (
+                id TEXT PRIMARY KEY,
+                proposal_id TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                proposer_wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                status TEXT DEFAULT 'PENDING',
+                votes_for REAL DEFAULT 0.0,
+                votes_against REAL DEFAULT 0.0,
+                voting_power_for REAL DEFAULT 0.0,
+                voting_power_against REAL DEFAULT 0.0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                voting_ends_at DATETIME,
+                executed_at DATETIME
+            );"
+        ).execute(&self.pool).await?;
+
+        // Governance: Votes
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS votes (
+                id TEXT PRIMARY KEY,
+                proposal_id TEXT NOT NULL REFERENCES proposals(id),
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                vote_type TEXT NOT NULL,
+                voting_power REAL NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(proposal_id, wallet_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Yield Farming: Pools
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS yield_pools (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                token_symbol TEXT NOT NULL,
+                apy REAL NOT NULL,
+                lock_period_days INTEGER DEFAULT 0,
+                total_staked REAL DEFAULT 0.0,
+                total_rewards REAL DEFAULT 0.0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Yield Farming: Positions
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS yield_positions (
+                id TEXT PRIMARY KEY,
+                pool_id TEXT NOT NULL REFERENCES yield_pools(id),
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                staked_amount REAL NOT NULL,
+                rewards_earned REAL DEFAULT 0.0,
+                locked_until DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Developer: Compiled Contracts
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS compiled_contracts (
+                id TEXT PRIMARY KEY,
+                contract_name TEXT NOT NULL,
+                wasm_hex TEXT NOT NULL,
+                source_code TEXT,
+                compiler_version TEXT,
+                compiled_by TEXT REFERENCES wallets(id),
+                gas_estimate INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Developer: Deployed Contracts
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS deployed_contracts (
+                id TEXT PRIMARY KEY,
+                contract_id TEXT NOT NULL UNIQUE,
+                compiled_contract_id TEXT REFERENCES compiled_contracts(id),
+                deployer_wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                address TEXT NOT NULL UNIQUE,
+                deployment_tx_id TEXT REFERENCES transactions(id),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Enterprise: Dark Pool Orders
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS dark_pool_orders (
+                id TEXT PRIMARY KEY,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                token_symbol TEXT NOT NULL,
+                amount REAL NOT NULL,
+                side TEXT NOT NULL,
+                min_price REAL,
+                max_price REAL,
+                status TEXT DEFAULT 'ACTIVE',
+                matched_order_id TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                executed_at DATETIME
+            );"
+        ).execute(&self.pool).await?;
+
+        // Enterprise: Compliance Logs
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS compliance_logs (
+                id TEXT PRIMARY KEY,
+                transaction_id TEXT REFERENCES transactions(id),
+                wallet_id TEXT REFERENCES wallets(id),
+                check_type TEXT NOT NULL,
+                result TEXT NOT NULL,
+                details TEXT,
+                checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Airdrop: Campaigns
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS airdrop_campaigns (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                token_symbol TEXT NOT NULL,
+                total_amount REAL NOT NULL,
+                per_claim REAL NOT NULL,
+                eligibility_criteria TEXT,
+                merkle_root TEXT,
+                status TEXT DEFAULT 'ACTIVE',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ends_at DATETIME
+            );"
+        ).execute(&self.pool).await?;
+
+        // Airdrop: Claims
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS airdrop_claims (
+                id TEXT PRIMARY KEY,
+                campaign_id TEXT NOT NULL REFERENCES airdrop_campaigns(id),
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                amount REAL NOT NULL,
+                merkle_proof TEXT,
+                claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(campaign_id, wallet_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Wallet: Multi-Sig Wallets
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS multisig_wallets (
+                id TEXT PRIMARY KEY,
+                address TEXT NOT NULL UNIQUE,
+                threshold INTEGER NOT NULL,
+                total_signers INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Wallet: Multi-Sig Signers
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS multisig_signers (
+                multisig_id TEXT NOT NULL REFERENCES multisig_wallets(id),
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                public_key TEXT NOT NULL,
+                weight INTEGER DEFAULT 1,
+                PRIMARY KEY (multisig_id, wallet_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Wallet: Multi-Sig Transactions
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS multisig_transactions (
+                id TEXT PRIMARY KEY,
+                multisig_id TEXT NOT NULL REFERENCES multisig_wallets(id),
+                transaction_id TEXT REFERENCES transactions(id),
+                status TEXT DEFAULT 'PENDING',
+                signatures_count INTEGER DEFAULT 0,
+                required_signatures INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Wallet: Multi-Sig Signatures
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS multisig_signatures (
+                id TEXT PRIMARY KEY,
+                multisig_tx_id TEXT NOT NULL REFERENCES multisig_transactions(id),
+                signer_wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                signature TEXT NOT NULL,
+                signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(multisig_tx_id, signer_wallet_id)
+            );"
+        ).execute(&self.pool).await?;
+
+        // Wallet: Payment Requests
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS payment_requests (
+                id TEXT PRIMARY KEY,
+                from_wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                to_address TEXT NOT NULL,
+                token_symbol TEXT NOT NULL,
+                amount REAL NOT NULL,
+                memo TEXT,
+                qr_code_data TEXT,
+                status TEXT DEFAULT 'PENDING',
+                expires_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Mobile: Device Tokens
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS mobile_devices (
+                id TEXT PRIMARY KEY,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                device_token TEXT NOT NULL UNIQUE,
+                platform TEXT NOT NULL,
+                app_version TEXT,
+                last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Mobile: Push Notifications
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS push_notifications (
+                id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL REFERENCES mobile_devices(id),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                data TEXT,
+                status TEXT DEFAULT 'PENDING',
+                sent_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );"
+        ).execute(&self.pool).await?;
+
+        // Mobile: Biometric Auth
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS biometric_auth (
+                id TEXT PRIMARY KEY,
+                wallet_id TEXT NOT NULL REFERENCES wallets(id),
+                biometric_type TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );"
         ).execute(&self.pool).await?;
 
@@ -154,7 +528,7 @@ impl Database {
         let sender_balance: f64 = sqlx::query_scalar(
             "SELECT amount FROM balances WHERE wallet_id = ? AND token_symbol = ?"
         )
-        .bind(tx.from_wallet_id.to_string())
+        .bind(&tx.from_wallet_id)
         .bind(&tx.token_symbol)
         .fetch_optional(&mut *db_tx).await?
         .unwrap_or(0.0);
@@ -170,7 +544,7 @@ impl Database {
             "UPDATE balances SET amount = ? WHERE wallet_id = ? AND token_symbol = ?"
         )
         .bind(new_sender_bal)
-        .bind(tx.from_wallet_id.to_string())
+        .bind(&tx.from_wallet_id)
         .bind(&tx.token_symbol)
         .execute(&mut *db_tx).await?;
 
@@ -180,7 +554,7 @@ impl Database {
             "INSERT INTO balances (wallet_id, token_symbol, amount) VALUES (?, ?, ?)
              ON CONFLICT(wallet_id, token_symbol) DO UPDATE SET amount = amount + ?"
         )
-        .bind(tx.to_wallet_id.to_string())
+        .bind(&tx.to_wallet_id)
         .bind(&tx.token_symbol)
         .bind(tx.amount)
         .bind(tx.amount) // for the update part
@@ -191,9 +565,9 @@ impl Database {
             "INSERT INTO transactions (id, from_wallet_id, to_wallet_id, token_symbol, amount, fee, status, signature)
              VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?)"
         )
-        .bind(tx.id.to_string())
-        .bind(tx.from_wallet_id.to_string())
-        .bind(tx.to_wallet_id.to_string())
+        .bind(&tx.id)
+        .bind(&tx.from_wallet_id)
+        .bind(&tx.to_wallet_id)
         .bind(&tx.token_symbol)
         .bind(tx.amount)
         .bind(tx.fee)
@@ -259,5 +633,17 @@ impl Database {
             None => Ok(0.0),
         }
     }
-}
 
+    pub async fn get_transactions(&self, wallet_id: Uuid) -> Result<Vec<crate::models::Transaction>, Box<dyn Error>> {
+        let rows = sqlx::query_as::<_, crate::models::Transaction>(
+            "SELECT * FROM transactions 
+             WHERE from_wallet_id = ? OR to_wallet_id = ? 
+             ORDER BY created_at DESC LIMIT 50"
+        )
+        .bind(wallet_id.to_string())
+        .bind(wallet_id.to_string())
+        .fetch_all(&self.pool).await?;
+
+        Ok(rows)
+    }
+}

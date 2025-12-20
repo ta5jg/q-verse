@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="qvrvGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c4b5fd;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="95" fill="#2e1065" stroke="url(#qvrvGrad)" stroke-width="5"/>
+  <text x="100" y="130" font-family="Arial" font-weight="bold" font-size="80" text-anchor="middle" fill="url(#qvrvGrad)">v</text>
+  <path d="M70 70 L 100 130 L 130 70" stroke="white" stroke-width="4" stroke-linecap="round" fill="none"/>
+</svg>
