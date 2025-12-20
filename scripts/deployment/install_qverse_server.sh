@@ -7,7 +7,7 @@ echo "🌌 Installing Q-Verse Core (Quantum-Safe Hybrid Network)..." >> /var/log
 if command -v apt-get &> /dev/null; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq pkg-config libssl-dev build-essential psmisc postgresql postgresql-contrib curl
+    apt-get install -y -qq pkg-config libssl-dev build-essential psmisc postgresql postgresql-contrib
 fi
 
 # 2. Database Setup (PostgreSQL)
