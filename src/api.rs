@@ -6,10 +6,12 @@ use crate::exchange::{AMM, OrderMatcher};
 use crate::wallet::{MultiSigManager, QRCodeGenerator, PaymentGateway};
 use crate::developer::{ContractCompiler, FormalVerifier, SDKGenerator};
 use crate::mobile::{MobileDeviceManager, PushNotificationService, BiometricAuthManager};
+use crate::validation;
 use serde::Deserialize;
 use uuid::Uuid;
 use wasmer::Value;
 use sqlx::Row;
+use log;
 
 // --- DTOs ---
 
@@ -242,12 +244,23 @@ pub async fn create_user(
     db: web::Data<Database>,
     req: web::Json<CreateUserRequest>
 ) -> impl Responder {
+    // Validate input
+    if let Err(e) = validation::validate_username(&req.username) {
+        log::warn!("Invalid username: {}", e);
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    
+    log::info!("Creating user: {}", req.username);
+    
     match db.create_user(&req.username).await {
         Ok(user) => {
             let (wallet, sk) = Wallet::new(user.id);
             if let Err(e) = db.save_wallet(&wallet).await {
-                return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+                log::error!("Failed to save wallet for user {}: {}", user.id, e);
+                return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to create wallet".into()));
             }
+            
+            log::info!("User created successfully: {} (wallet: {})", user.id, wallet.id);
             
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "user": user,
@@ -255,7 +268,10 @@ pub async fn create_user(
                 "secret_key": sk 
             })))
         },
-        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
+        Err(e) => {
+            log::error!("Failed to create user: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()))
+        },
     }
 }
 
@@ -274,21 +290,53 @@ pub async fn transfer(
     db: web::Data<Database>,
     req: web::Json<TransferRequest>
 ) -> impl Responder {
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.from_wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_wallet_id(&req.to_wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_token_symbol(&req.token) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_amount(req.amount) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if req.fee < 0.0 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Fee cannot be negative".into()));
+    }
+    
     let token_sym = match TokenSymbol::try_from(req.token.clone()) {
         Ok(sym) => sym,
-        Err(_) => return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Invalid Token".into())),
+        Err(e) => {
+            log::warn!("Invalid token symbol: {}", req.token);
+            return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e));
+        },
     };
 
-    let mock_wallet = Wallet { 
-        id: req.from_wallet_id, 
-        user_id: Uuid::nil(), 
-        address: "unknown".into(), 
-        public_key: "unknown".into(), 
-        created_at: chrono::Utc::now() 
+    // Get sender wallet from DB
+    let from_wallet: Option<Wallet> = sqlx::query_as(
+        "SELECT * FROM wallets WHERE id = ?"
+    )
+    .bind(req.from_wallet_id.to_string())
+    .fetch_optional(&db.pool)
+    .await
+    .ok()
+    .flatten();
+
+    let from_wallet = match from_wallet {
+        Some(w) => w,
+        None => {
+            log::warn!("Wallet not found: {}", req.from_wallet_id);
+            return HttpResponse::NotFound().json(ApiResponse::<()>::error("Sender wallet not found".into()));
+        },
     };
+
+    log::info!("Processing transfer: {} {} from {} to {}", req.amount, req.token, req.from_wallet_id, req.to_wallet_id);
 
     let tx = match Transaction::new(
-        &mock_wallet, 
+        &from_wallet, 
         req.to_wallet_id, 
         token_sym.clone(), 
         req.amount, 
@@ -296,12 +344,21 @@ pub async fn transfer(
         &req.secret_key
     ) {
         Ok(t) => t,
-        Err(e) => return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
+        Err(e) => {
+            log::error!("Failed to create transaction: {}", e);
+            return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+        },
     };
 
     match db.process_transfer(&tx).await {
-        Ok(_) => HttpResponse::Ok().json(ApiResponse::success(tx)),
-        Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
+        Ok(_) => {
+            log::info!("Transfer completed: {}", tx.id);
+            HttpResponse::Ok().json(ApiResponse::success(tx))
+        },
+        Err(e) => {
+            log::error!("Transfer failed: {}", e);
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
+        },
     }
 }
 
@@ -388,30 +445,83 @@ pub async fn swap_tokens(
     db: web::Data<Database>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
-    // Get or create liquidity pool
-    let pool_id = format!("{}-{}", req.token_in, req.token_out);
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_token_symbol(&req.token_in) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_token_symbol(&req.token_out) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_amount(req.amount_in) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
-    // Get pool reserves from DB (simplified - in production, query actual pool)
-    let reserve_in = db.get_balance(Uuid::nil(), &req.token_in).await.unwrap_or(1000.0);
-    let reserve_out = db.get_balance(Uuid::nil(), &req.token_out).await.unwrap_or(2000.0);
+    log::info!("Swap request: {} {} -> {} (amount: {})", req.wallet_id, req.token_in, req.token_out, req.amount_in);
+    
+    // Get liquidity pool from DB
+    let pool: Option<LiquidityPool> = sqlx::query_as(
+        "SELECT * FROM liquidity_pools WHERE (token_a = ? AND token_b = ?) OR (token_a = ? AND token_b = ?)"
+    )
+    .bind(&req.token_in)
+    .bind(&req.token_out)
+    .bind(&req.token_out)
+    .bind(&req.token_in)
+    .fetch_optional(&db.pool)
+    .await
+    .ok()
+    .flatten();
+    
+    let (reserve_in, reserve_out) = match pool {
+        Some(p) => {
+            if p.token_a == req.token_in {
+                (p.reserve_a, p.reserve_b)
+            } else {
+                (p.reserve_b, p.reserve_a)
+            }
+        },
+        None => {
+            log::warn!("Liquidity pool not found for {}/{}", req.token_in, req.token_out);
+            return HttpResponse::NotFound().json(ApiResponse::<()>::error("Liquidity pool not found".into()));
+        },
+    };
+    
+    if reserve_in <= 0.0 || reserve_out <= 0.0 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Insufficient liquidity".into()));
+    }
     
     // Calculate swap output
     let amount_out = match AMM::calculate_swap_out(reserve_in, reserve_out, req.amount_in, 0.003) {
         Ok(amt) => amt,
-        Err(e) => return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
+        Err(e) => {
+            log::error!("Swap calculation failed: {}", e);
+            return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+        },
     };
     
     // Check slippage protection
     if let Some(min) = req.min_amount_out {
         if amount_out < min {
+            log::warn!("Slippage too high: expected min {}, got {}", min, amount_out);
             return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Slippage too high".into()));
         }
     }
     
-    // Execute swap (simplified - in production, update pool reserves)
+    // Calculate price impact
+    let price_impact = if reserve_out > 0.0 {
+        (amount_out / reserve_out) * 100.0
+    } else {
+        0.0
+    };
+    
+    log::info!("Swap calculated: {} {} -> {} {} (price impact: {:.2}%)", 
+        req.amount_in, req.token_in, amount_out, req.token_out, price_impact);
+    
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "amount_out": amount_out,
-        "price_impact": 0.05,
+        "price_impact": price_impact,
         "fee": req.amount_in * 0.003
     })))
 }
@@ -437,28 +547,56 @@ pub async fn create_order(
     db: web::Data<Database>,
     req: web::Json<CreateOrderRequest>
 ) -> impl Responder {
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_pair(&req.pair) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_order_side(&req.side) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_order_type(&req.order_type) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_price(req.price) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_amount(req.amount) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    
+    log::info!("Creating order: {} {} {} at {} (amount: {})", req.wallet_id, req.side, req.pair, req.price, req.amount);
+    
     let order_id = Uuid::new_v4().to_string();
     
     // Save order to DB
-    sqlx::query(
+    match sqlx::query(
         "INSERT INTO orders (id, wallet_id, pair, side, order_type, price, amount, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')"
     )
     .bind(&order_id)
     .bind(req.wallet_id.to_string())
     .bind(&req.pair)
-    .bind(&req.side)
-    .bind(&req.order_type)
+    .bind(&req.side.to_uppercase())
+    .bind(&req.order_type.to_uppercase())
     .bind(req.price)
     .bind(req.amount)
     .execute(&db.pool)
-    .await
-    .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
-    
-    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "order_id": order_id,
-        "status": "PENDING"
-    })))
+    .await {
+        Ok(_) => {
+            log::info!("Order created: {}", order_id);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "order_id": order_id,
+                "status": "PENDING"
+            })))
+        },
+        Err(e) => {
+            log::error!("Failed to create order: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()))
+        },
+    }
 }
 
 pub async fn get_orderbook(
@@ -467,22 +605,38 @@ pub async fn get_orderbook(
 ) -> impl Responder {
     let pair = path.into_inner();
     
+    // Validate pair format
+    if let Err(e) = validation::validate_pair(&pair) {
+        log::warn!("Invalid pair format: {}", e);
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    
     // Query orders from DB
-    let buy_orders: Vec<Order> = sqlx::query_as(
+    let buy_orders: Vec<Order> = match sqlx::query_as(
         "SELECT * FROM orders WHERE pair = ? AND side = 'BUY' AND status = 'PENDING' ORDER BY price DESC LIMIT 20"
     )
     .bind(&pair)
     .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default();
+    .await {
+        Ok(orders) => orders,
+        Err(e) => {
+            log::error!("Failed to fetch buy orders: {}", e);
+            return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch orderbook".into()));
+        },
+    };
     
-    let sell_orders: Vec<Order> = sqlx::query_as(
+    let sell_orders: Vec<Order> = match sqlx::query_as(
         "SELECT * FROM orders WHERE pair = ? AND side = 'SELL' AND status = 'PENDING' ORDER BY price ASC LIMIT 20"
     )
     .bind(&pair)
     .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default();
+    .await {
+        Ok(orders) => orders,
+        Err(e) => {
+            log::error!("Failed to fetch sell orders: {}", e);
+            return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch orderbook".into()));
+        },
+    };
     
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "bids": buy_orders,
@@ -496,28 +650,56 @@ pub async fn bridge_assets(
     db: web::Data<Database>,
     req: web::Json<BridgeRequest>
 ) -> impl Responder {
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_chain_name(&req.source_chain) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_chain_name(&req.target_chain) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if req.source_chain.to_lowercase() == req.target_chain.to_lowercase() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Source and target chains must be different".into()));
+    }
+    if let Err(e) = validation::validate_token_symbol(&req.token_symbol) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_amount(req.amount) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    
+    log::info!("Bridge request: {} {} from {} to {}", req.wallet_id, req.amount, req.source_chain, req.target_chain);
+    
     let bridge_id = Uuid::new_v4().to_string();
     
     // Create bridge transaction
-    sqlx::query(
+    match sqlx::query(
         "INSERT INTO bridge_transactions (id, source_chain, target_chain, wallet_id, token_symbol, amount, status)
          VALUES (?, ?, ?, ?, ?, ?, 'PENDING')"
     )
     .bind(&bridge_id)
-    .bind(&req.source_chain)
-    .bind(&req.target_chain)
+    .bind(&req.source_chain.to_lowercase())
+    .bind(&req.target_chain.to_lowercase())
     .bind(req.wallet_id.to_string())
     .bind(&req.token_symbol)
     .bind(req.amount)
     .execute(&db.pool)
-    .await
-    .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
-    
-    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "bridge_id": bridge_id,
-        "status": "PENDING",
-        "estimated_time": "5-10 minutes"
-    })))
+    .await {
+        Ok(_) => {
+            log::info!("Bridge transaction created: {}", bridge_id);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "bridge_id": bridge_id,
+                "status": "PENDING",
+                "estimated_time": "5-10 minutes"
+            })))
+        },
+        Err(e) => {
+            log::error!("Failed to create bridge transaction: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()))
+        },
+    }
 }
 
 // --- EXPLORER HANDLERS ---
@@ -628,10 +810,23 @@ pub async fn create_proposal(
     db: web::Data<Database>,
     req: web::Json<CreateProposalRequest>
 ) -> impl Responder {
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.proposer_wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_proposal_title(&req.title) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_proposal_description(&req.description) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    
+    log::info!("Creating proposal: {} by {}", req.title, req.proposer_wallet_id);
+    
     let proposal_id = format!("QIP-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
     let id = Uuid::new_v4().to_string();
     
-    sqlx::query(
+    match sqlx::query(
         "INSERT INTO proposals (id, proposal_id, title, description, proposer_wallet_id, status)
          VALUES (?, ?, ?, ?, ?, 'PENDING')"
     )
@@ -641,74 +836,150 @@ pub async fn create_proposal(
     .bind(&req.description)
     .bind(req.proposer_wallet_id.to_string())
     .execute(&db.pool)
-    .await
-    .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
-    
-    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "proposal_id": proposal_id,
-        "status": "PENDING"
-    })))
+    .await {
+        Ok(_) => {
+            log::info!("Proposal created: {}", proposal_id);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "proposal_id": proposal_id,
+                "status": "PENDING"
+            })))
+        },
+        Err(e) => {
+            log::error!("Failed to create proposal: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()))
+        },
+    }
 }
 
 pub async fn vote_proposal(
     db: web::Data<Database>,
     req: web::Json<VoteRequest>
 ) -> impl Responder {
+    // Validate inputs
+    if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if let Err(e) = validation::validate_vote_type(&req.vote_type) {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
+    }
+    if req.proposal_id.is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Proposal ID cannot be empty".into()));
+    }
+    
+    // Check if proposal exists
+    let proposal = match db.get_proposal(&req.proposal_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            log::warn!("Proposal not found: {}", req.proposal_id);
+            return HttpResponse::NotFound().json(ApiResponse::<()>::error("Proposal not found".into()));
+        },
+        Err(e) => {
+            log::error!("Failed to get proposal: {}", e);
+            return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch proposal".into()));
+        },
+    };
+    
+    if proposal.status != "ACTIVE" && proposal.status != "PENDING" {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Proposal is not active for voting".into()));
+    }
+    
+    // Check if already voted
+    let existing_vote: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM votes WHERE proposal_id = ? AND wallet_id = ?"
+    )
+    .bind(&req.proposal_id)
+    .bind(req.wallet_id.to_string())
+    .fetch_optional(&db.pool)
+    .await
+    .ok()
+    .flatten();
+    
+    if existing_vote.is_some() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Already voted on this proposal".into()));
+    }
+    
     // Get wallet's QVR balance for quadratic voting
-    let balance = db.get_balance(req.wallet_id, "QVR").await.unwrap_or(0.0);
+    let balance = match db.get_balance(req.wallet_id, "QVR").await {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("Failed to get balance: {}", e);
+            return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to get wallet balance".into()));
+        },
+    };
+    
+    if balance <= 0.0 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Insufficient QVR balance for voting".into()));
+    }
+    
     let voting_power = balance.sqrt(); // Quadratic voting
     
-    let vote_id = Uuid::new_v4().to_string();
+    log::info!("Voting on proposal {}: {} votes {} (power: {:.2})", req.proposal_id, req.wallet_id, req.vote_type, voting_power);
     
-    sqlx::query(
+    let vote_id = Uuid::new_v4().to_string();
+    let vote_type_upper = req.vote_type.to_uppercase();
+    
+    // Insert vote
+    match sqlx::query(
         "INSERT INTO votes (id, proposal_id, wallet_id, vote_type, voting_power)
          VALUES (?, ?, ?, ?, ?)"
     )
     .bind(&vote_id)
     .bind(&req.proposal_id)
     .bind(req.wallet_id.to_string())
-    .bind(&req.vote_type)
+    .bind(&vote_type_upper)
     .bind(voting_power)
     .execute(&db.pool)
-    .await
-    .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
-    
-    // Update proposal vote counts
-    if req.vote_type == "FOR" {
-        sqlx::query(
-            "UPDATE proposals SET votes_for = votes_for + 1, voting_power_for = voting_power_for + ? WHERE proposal_id = ?"
-        )
-        .bind(voting_power)
-        .bind(&req.proposal_id)
-        .execute(&db.pool)
-        .await.ok();
-    } else {
-        sqlx::query(
-            "UPDATE proposals SET votes_against = votes_against + 1, voting_power_against = voting_power_against + ? WHERE proposal_id = ?"
-        )
-        .bind(voting_power)
-        .bind(&req.proposal_id)
-        .execute(&db.pool)
-        .await.ok();
+    .await {
+        Ok(_) => {
+            // Update proposal vote counts
+            if vote_type_upper == "FOR" {
+                sqlx::query(
+                    "UPDATE proposals SET votes_for = votes_for + 1, voting_power_for = voting_power_for + ? WHERE proposal_id = ?"
+                )
+                .bind(voting_power)
+                .bind(&req.proposal_id)
+                .execute(&db.pool)
+                .await.ok();
+            } else if vote_type_upper == "AGAINST" {
+                sqlx::query(
+                    "UPDATE proposals SET votes_against = votes_against + 1, voting_power_against = voting_power_against + ? WHERE proposal_id = ?"
+                )
+                .bind(voting_power)
+                .bind(&req.proposal_id)
+                .execute(&db.pool)
+                .await.ok();
+            }
+            
+            log::info!("Vote recorded: {}", vote_id);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "vote_id": vote_id,
+                "voting_power": voting_power
+            })))
+        },
+        Err(e) => {
+            log::error!("Failed to record vote: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()))
+        },
     }
-    
-    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-        "vote_id": vote_id,
-        "voting_power": voting_power
-    })))
 }
 
 pub async fn get_proposals(
     db: web::Data<Database>
 ) -> impl Responder {
-    let proposals: Vec<crate::models::Proposal> = sqlx::query_as(
+    match sqlx::query_as::<_, crate::models::Proposal>(
         "SELECT * FROM proposals ORDER BY created_at DESC LIMIT 50"
     )
     .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default();
-    
-    HttpResponse::Ok().json(ApiResponse::success(proposals))
+    .await {
+        Ok(proposals) => {
+            log::debug!("Fetched {} proposals", proposals.len());
+            HttpResponse::Ok().json(ApiResponse::success(proposals))
+        },
+        Err(e) => {
+            log::error!("Failed to fetch proposals: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch proposals".into()))
+        },
+    }
 }
 
 // --- YIELD FARMING HANDLERS ---
@@ -741,14 +1012,20 @@ pub async fn stake_yield(
 pub async fn get_yield_pools(
     db: web::Data<Database>
 ) -> impl Responder {
-    let pools: Vec<crate::models::YieldPool> = sqlx::query_as(
+    match sqlx::query_as::<_, crate::models::YieldPool>(
         "SELECT * FROM yield_pools WHERE is_active = TRUE"
     )
     .fetch_all(&db.pool)
-    .await
-    .unwrap_or_default();
-    
-    HttpResponse::Ok().json(ApiResponse::success(pools))
+    .await {
+        Ok(pools) => {
+            log::debug!("Fetched {} yield pools", pools.len());
+            HttpResponse::Ok().json(ApiResponse::success(pools))
+        },
+        Err(e) => {
+            log::error!("Failed to fetch yield pools: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to fetch yield pools".into()))
+        },
+    }
 }
 
 // --- AIRDROP HANDLERS ---

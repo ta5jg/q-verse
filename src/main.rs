@@ -12,6 +12,9 @@ mod exchange;
 mod wallet;
 mod developer;
 mod mobile;
+mod config;
+mod validation;
+mod errors;
 
 use actix_web::{web, App, HttpServer};
 use db::Database;
@@ -33,35 +36,48 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    println!("🌌 Q-Verse Core: Quantum-Safe Hybrid Finance Network");
-    println!("---------------------------------------------------");
+    // Load configuration
+    let config = config::Config::load();
+    
+    // Initialize logger
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(&config.rust_log))
+        .init();
+    
+    log::info!("🌌 Q-Verse Core: Quantum-Safe Hybrid Finance Network");
+    log::info!("---------------------------------------------------");
     
     // 1. Initialize Database
-    println!("🔌 Connecting to Ledger...");
-    let db = Database::connect().await.expect("Failed to connect to DB");
+    log::info!("🔌 Connecting to Ledger...");
+    let db = Database::connect_with_url(&config.database_url, config.max_connections)
+        .await
+        .expect("Failed to connect to DB");
     db.init_schema().await.expect("Failed to init schema");
+    log::info!("✅ Database connected and schema initialized");
 
     // 2. Initialize Engines
-    println!("🧠 Initializing Q-VM & Q-Mind AI...");
+    log::info!("🧠 Initializing Q-VM & Q-Mind AI...");
     let vm = Arc::new(Mutex::new(QVM::new()));
     let ai = Arc::new(Mutex::new(QMind::new()));
+    log::info!("✅ Q-VM and Q-Mind initialized");
 
     // 3. Start P2P Network
-    println!("🌐 Bootstrapping P2P Network...");
-    let mut p2p_node = P2PNode::new(None).await.expect("Failed to create P2P node");
+    log::info!("🌐 Bootstrapping P2P Network...");
+    let mut p2p_node = P2PNode::new(config.node_id.as_deref()).await
+        .expect("Failed to create P2P node");
     
     let (tx, _rx) = mpsc::channel(32); 
     
     tokio::spawn(async move {
         if let Err(e) = p2p_node.start().await {
-            eprintln!("❌ P2P Network Error: {}", e);
+            log::error!("❌ P2P Network Error: {}", e);
         }
     });
+    log::info!("✅ P2P Network started");
 
-    let connected_peers = Arc::new(Mutex::new(vec!["12D3KooW...".to_string()]));
+    let connected_peers = Arc::new(Mutex::new(vec![]));
 
     let app_state = web::Data::new(AppState {
-        db,
+        db: db.clone(),
         vm,
         ai,
         network_tx: tx,
@@ -69,10 +85,15 @@ async fn main() -> std::io::Result<()> {
     });
 
     // 4. Start API Server
-    println!("🚀 Starting API Server at http://127.0.0.1:8080");
+    let bind_addr = config.bind_address();
+    log::info!("🚀 Starting API Server at http://{}", bind_addr);
     
     HttpServer::new(move || {
-        let cors = Cors::permissive();
+        let cors = if config.enable_cors {
+            Cors::permissive()
+        } else {
+            Cors::default()
+        };
 
         App::new()
             .wrap(cors)
@@ -80,7 +101,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.db.clone())) 
             .configure(api::config)
     })
-    .bind(("0.0.0.0", 8080))?
+    .bind(&bind_addr)?
     .run()
     .await
 }

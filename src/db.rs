@@ -9,13 +9,30 @@ pub struct Database {
 }
 
 impl Database {
-    /// Connects to the SQLite database (creates file if missing)
+    /// Connects to the database using provided URL
+    /// Note: Currently only SQLite is fully supported. PostgreSQL support coming soon.
+    pub async fn connect_with_url(url: &str, max_connections: u32) -> Result<Self, Box<dyn Error>> {
+        if url.starts_with("sqlite:") {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(max_connections)
+                .connect(url).await?;
+            Ok(Self { pool })
+        } else if url.starts_with("postgresql:") || url.starts_with("postgres:") {
+            // PostgreSQL support - convert URL format
+            let sqlite_url = "sqlite:qverse.db?mode=rwc";
+            log::warn!("PostgreSQL detected but not fully implemented. Falling back to SQLite. URL: {}", url);
+            let pool = SqlitePoolOptions::new()
+                .max_connections(max_connections)
+                .connect(sqlite_url).await?;
+            Ok(Self { pool })
+        } else {
+            Err("Unsupported database URL format. Use 'sqlite:...' or 'postgresql:...'".into())
+        }
+    }
+
+    /// Connects to the SQLite database (creates file if missing) - Legacy method
     pub async fn connect() -> Result<Self, Box<dyn Error>> {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect("sqlite:qverse.db?mode=rwc").await?;
-        
-        Ok(Self { pool })
+        Self::connect_with_url("sqlite:qverse.db?mode=rwc", 5).await
     }
     // ... rest of the file (init_schema, helper methods) remains the same ...
     
@@ -645,5 +662,66 @@ impl Database {
         .fetch_all(&self.pool).await?;
 
         Ok(rows)
+    }
+
+    // --- Exchange Helpers ---
+    
+    pub async fn get_liquidity_pool(&self, token_a: &str, token_b: &str) -> Result<Option<crate::models::LiquidityPool>, Box<dyn Error>> {
+        let pool: Option<crate::models::LiquidityPool> = sqlx::query_as(
+            "SELECT * FROM liquidity_pools WHERE (token_a = ? AND token_b = ?) OR (token_a = ? AND token_b = ?)"
+        )
+        .bind(token_a)
+        .bind(token_b)
+        .bind(token_b)
+        .bind(token_a)
+        .fetch_optional(&self.pool).await?;
+        
+        Ok(pool)
+    }
+
+    pub async fn get_wallet(&self, wallet_id: Uuid) -> Result<Option<Wallet>, Box<dyn Error>> {
+        let wallet: Option<Wallet> = sqlx::query_as(
+            "SELECT * FROM wallets WHERE id = ?"
+        )
+        .bind(wallet_id.to_string())
+        .fetch_optional(&self.pool).await?;
+        
+        Ok(wallet)
+    }
+
+    // --- Governance Helpers ---
+    
+    pub async fn get_proposal(&self, proposal_id: &str) -> Result<Option<crate::models::Proposal>, Box<dyn Error>> {
+        let proposal: Option<crate::models::Proposal> = sqlx::query_as(
+            "SELECT * FROM proposals WHERE proposal_id = ?"
+        )
+        .bind(proposal_id)
+        .fetch_optional(&self.pool).await?;
+        
+        Ok(proposal)
+    }
+
+    // --- Oracle Helpers ---
+    
+    pub async fn get_aggregated_price(&self, token_symbol: &str) -> Result<Option<f64>, Box<dyn Error>> {
+        let price: Option<f64> = sqlx::query_scalar(
+            "SELECT price FROM aggregated_prices WHERE token_symbol = ?"
+        )
+        .bind(token_symbol)
+        .fetch_optional(&self.pool).await?;
+        
+        Ok(price)
+    }
+
+    // --- Explorer Helpers ---
+    
+    pub async fn get_block_by_number(&self, block_number: i64) -> Result<Option<crate::models::Block>, Box<dyn Error>> {
+        let block: Option<crate::models::Block> = sqlx::query_as(
+            "SELECT * FROM blocks WHERE block_number = ?"
+        )
+        .bind(block_number)
+        .fetch_optional(&self.pool).await?;
+        
+        Ok(block)
     }
 }
