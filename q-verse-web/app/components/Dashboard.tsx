@@ -3,6 +3,9 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRealtimeTPS, useRealtimePrice } from "@/hooks/useRealtime";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import { apiMethods } from "@/lib/api";
 
 type User = {
   user: {
@@ -32,25 +35,56 @@ export default function Dashboard({
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [marketData, setMarketData] = useState<Market[]>([]);
   const [systemStatus, setSystemStatus] = useState<string>("Online");
-  const [tps, setTps] = useState<number>(12450);
+  const [loading, setLoading] = useState(true);
+  
+  // Real-time data hooks
+  const { tps } = useRealtimeTPS();
+  const { price: qvrPrice } = useRealtimePrice("QVR");
+  const { price: rglsPrice } = useRealtimePrice("RGLS");
+  const { price: popeoPrice } = useRealtimePrice("POPEO");
+  const { price: qvrgPrice } = useRealtimePrice("QVRg");
 
-  // Asset Metadata
+  // Fetch real balances
+  useEffect(() => {
+    const fetchBalances = async () => {
+      try {
+        const walletId = userData.wallet.id;
+        const [qvrBalance, rglsBalance, popeoBalance, qvrgBalance] = await Promise.all([
+          apiMethods.getBalance(walletId, "QVR").catch(() => 0),
+          apiMethods.getBalance(walletId, "RGLS").catch(() => 0),
+          apiMethods.getBalance(walletId, "POPEO").catch(() => 0),
+          apiMethods.getBalance(walletId, "QVRg").catch(() => 0),
+        ]);
+
+        setMarketData([
+          { id: "QVR", name: "Q-Verse", price: qvrPrice || 0.4521 },
+          { id: "RGLS", name: "Regilis", price: rglsPrice || 1.0000 },
+          { id: "POPEO", name: "Popeo Stable", price: popeoPrice || 1.0002 },
+          { id: "QVRg", name: "QVR-Gold", price: qvrgPrice || 65.40 },
+        ]);
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch balances:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchBalances();
+  }, [userData.wallet.id, qvrPrice, rglsPrice, popeoPrice, qvrgPrice]);
+
+  // Asset Metadata with real-time prices
   const assetsList = [
-      { id: "QVR", name: "Q-Verse", type: "Native", logo: "/logos/qvr.svg", balance: 12450.00, price: 0.4521, change: "+5.2%" },
-      { id: "POPEO", name: "Popeo Stable", type: "Stablecoin", logo: "/logos/popeo.svg", balance: 500.00, price: 1.0002, change: "+0.01%" },
-      { id: "RGLS", name: "Regilis", type: "Asset Backed", logo: "/logos/rgls.svg", balance: 100.00, price: 1.0000, change: "+0.1%" },
-      { id: "QVRg", name: "QVR-Gold", type: "Commodity", logo: "/logos/qvrg.svg", balance: 5.0, price: 65.40, change: "+1.2%" },
+      { id: "QVR", name: "Q-Verse", type: "Native", logo: "/logos/qvr.svg", balance: 0, price: qvrPrice || 0.4521, change: "+5.2%" },
+      { id: "POPEO", name: "Popeo Stable", type: "Stablecoin", logo: "/logos/popeo.svg", balance: 0, price: popeoPrice || 1.0002, change: "+0.01%" },
+      { id: "RGLS", name: "Regilis", type: "Asset Backed", logo: "/logos/rgls.svg", balance: 0, price: rglsPrice || 1.0000, change: "+0.1%" },
+      { id: "QVRg", name: "QVR-Gold", type: "Commodity", logo: "/logos/qvrg.svg", balance: 0, price: qvrgPrice || 65.40, change: "+1.2%" },
   ];
 
   const totalPortfolioValue = assetsList.reduce((acc, asset) => acc + (asset.balance * asset.price), 0);
 
-  // Simulate Live Data
-  useEffect(() => {
-    const interval = setInterval(() => {
-        setTps(prev => prev + Math.floor(Math.random() * 50 - 20));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  if (loading) {
+    return <LoadingSpinner size="lg" text="Loading dashboard..." />;
+  }
 
   return (
     <div className="animate-fade-in pb-20 pt-10 px-6 max-w-[1600px] mx-auto">

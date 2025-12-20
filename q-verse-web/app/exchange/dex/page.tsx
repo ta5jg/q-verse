@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { apiMethods } from "@/lib/api";
+import { useRealtimePrice } from "@/hooks/useRealtime";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 // Token Definitions with Logos
 const tokens = [

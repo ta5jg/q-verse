@@ -7,11 +7,15 @@ use crate::wallet::{MultiSigManager, QRCodeGenerator, PaymentGateway};
 use crate::developer::{ContractCompiler, FormalVerifier, SDKGenerator};
 use crate::mobile::{MobileDeviceManager, PushNotificationService, BiometricAuthManager};
 use crate::validation;
+use crate::cache::CacheManager;
+use crate::metrics::Metrics;
+use crate::batch::BatchOperations;
 use serde::Deserialize;
 use uuid::Uuid;
 use wasmer::Value;
 use sqlx::Row;
 use log;
+use std::time::Instant;
 
 // --- DTOs ---
 
@@ -210,6 +214,35 @@ pub struct VerifyBiometricRequest {
     pub signature: String,
 }
 
+// Batch Operations DTOs
+#[derive(Deserialize)]
+pub struct BatchTransferRequest {
+    pub transfers: Vec<BatchTransferItemRequest>,
+}
+
+#[derive(Deserialize)]
+pub struct BatchTransferItemRequest {
+    pub from_wallet_id: Uuid,
+    pub to_wallet_id: Uuid,
+    pub token_symbol: String,
+    pub amount: f64,
+    pub fee: f64,
+    pub secret_key: String,
+}
+
+#[derive(Deserialize)]
+pub struct BatchSwapRequest {
+    pub wallet_id: Uuid,
+    pub swaps: Vec<BatchSwapItemRequest>,
+}
+
+#[derive(Deserialize)]
+pub struct BatchSwapItemRequest {
+    pub token_in: String,
+    pub token_out: String,
+    pub amount_in: f64,
+}
+
 // --- Handlers ---
 
 // AI Handler
@@ -236,8 +269,30 @@ pub async fn stake(
     }
 }
 
-pub async fn health_check() -> impl Responder {
-    HttpResponse::Ok().json(ApiResponse::success("Q-Verse Core Online 🚀"))
+pub async fn health_check(
+    metrics: web::Data<Metrics>
+) -> impl Responder {
+    let start = Instant::now();
+    metrics.increment_requests();
+    
+    let stats = metrics.get_stats();
+    let response_time = start.elapsed().as_millis() as u64;
+    metrics.record_response_time(response_time);
+    metrics.increment_success();
+    
+    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+        "status": "online",
+        "version": "0.2.2",
+        "uptime_seconds": 0,
+        "metrics": stats,
+        "response_time_ms": response_time
+    })))
+}
+
+pub async fn get_metrics(
+    metrics: web::Data<Metrics>
+) -> impl Responder {
+    HttpResponse::Ok().json(ApiResponse::success(metrics.get_stats()))
 }
 
 pub async fn create_user(
@@ -288,8 +343,11 @@ pub async fn get_balance(
 
 pub async fn transfer(
     db: web::Data<Database>,
+    metrics: web::Data<Metrics>,
     req: web::Json<TransferRequest>
 ) -> impl Responder {
+    let start = Instant::now();
+    metrics.increment_requests();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.from_wallet_id) {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
@@ -352,10 +410,15 @@ pub async fn transfer(
 
     match db.process_transfer(&tx).await {
         Ok(_) => {
-            log::info!("Transfer completed: {}", tx.id);
+            let response_time = start.elapsed().as_millis() as u64;
+            metrics.record_response_time(response_time);
+            metrics.increment_success();
+            metrics.increment_transactions();
+            log::info!("Transfer completed: {} ({}ms)", tx.id, response_time);
             HttpResponse::Ok().json(ApiResponse::success(tx))
         },
         Err(e) => {
+            metrics.increment_failure();
             log::error!("Transfer failed: {}", e);
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
         },
@@ -443,8 +506,12 @@ pub async fn verify_iso20022(
 
 pub async fn swap_tokens(
     db: web::Data<Database>,
+    metrics: web::Data<Metrics>,
+    cache: web::Data<CacheManager>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
+    let start = Instant::now();
+    metrics.increment_requests();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
@@ -527,20 +594,39 @@ pub async fn swap_tokens(
 }
 
 pub async fn get_liquidity_pools(
-    db: web::Data<Database>
+    db: web::Data<Database>,
+    cache: web::Data<CacheManager>
 ) -> impl Responder {
-    // In production, query from DB
-    HttpResponse::Ok().json(ApiResponse::success(vec![
-        serde_json::json!({
-            "id": "qvr-usdt",
-            "token_a": "QVR",
-            "token_b": "USDT",
-            "reserve_a": 1000000.0,
-            "reserve_b": 450000.0,
-            "total_supply": 670820.0,
-            "fee_rate": 0.003
-        })
-    ]))
+    // Check cache
+    if let Some(cached) = cache.pools.get("all_pools").await {
+        log::debug!("Pools cache hit");
+        return HttpResponse::Ok().json(ApiResponse::success(cached));
+    }
+    
+    // Query from DB
+    let pools: Vec<LiquidityPool> = match sqlx::query_as(
+        "SELECT * FROM liquidity_pools ORDER BY total_supply DESC"
+    )
+    .fetch_all(&db.pool)
+    .await {
+        Ok(p) => p,
+        Err(_) => vec![], // Return empty if error
+    };
+    
+    let pools_json: Vec<serde_json::Value> = pools.iter().map(|p| serde_json::json!({
+        "id": p.id,
+        "token_a": p.token_a,
+        "token_b": p.token_b,
+        "reserve_a": p.reserve_a,
+        "reserve_b": p.reserve_b,
+        "total_supply": p.total_supply,
+        "fee_rate": p.fee_rate
+    })).collect();
+    
+    // Cache the result
+    cache.pools.set("all_pools".to_string(), serde_json::json!(pools_json.clone())).await;
+    
+    HttpResponse::Ok().json(ApiResponse::success(pools_json))
 }
 
 pub async fn create_order(
@@ -743,11 +829,23 @@ pub async fn search_explorer(
 
 pub async fn get_price(
     db: web::Data<Database>,
+    cache: web::Data<CacheManager>,
     path: web::Path<String>
 ) -> impl Responder {
     let token_symbol = path.into_inner();
     
-    // Get aggregated price
+    // Check cache first
+    if let Some(cached_price) = cache.prices.get(&token_symbol).await {
+        log::debug!("Price cache hit for {}", token_symbol);
+        return HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+            "token": token_symbol,
+            "price": cached_price,
+            "sources": 3,
+            "cached": true
+        })));
+    }
+    
+    // Get aggregated price from DB
     let price: Option<f64> = sqlx::query_scalar(
         "SELECT price FROM aggregated_prices WHERE token_symbol = ?"
     )
@@ -758,11 +856,17 @@ pub async fn get_price(
     .flatten();
     
     match price {
-        Some(p) => HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-            "token": token_symbol,
-            "price": p,
-            "sources": 3
-        }))),
+        Some(p) => {
+            // Cache the price
+            cache.prices.set(token_symbol.clone(), p).await;
+            
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "token": token_symbol,
+                "price": p,
+                "sources": 3,
+                "cached": false
+            })))
+        },
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Price not found".into())),
     }
 }
@@ -1539,6 +1643,118 @@ pub async fn verify_biometric(
     }
 }
 
+// --- BATCH OPERATIONS HANDLERS ---
+
+pub async fn batch_transfer(
+    db: web::Data<Database>,
+    metrics: web::Data<Metrics>,
+    req: web::Json<BatchTransferRequest>
+) -> impl Responder {
+    let start = Instant::now();
+    metrics.increment_requests();
+    
+    if req.transfers.is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("No transfers provided".into()));
+    }
+    
+    if req.transfers.len() > 100 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Maximum 100 transfers per batch".into()));
+    }
+    
+    log::info!("Processing batch transfer: {} transfers", req.transfers.len());
+    
+    // Convert to batch items
+    let mut batch_items = Vec::new();
+    for transfer in &req.transfers {
+        // Validate each transfer
+        if let Err(e) = validation::validate_wallet_id(&transfer.from_wallet_id) {
+            return HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("Invalid from_wallet_id: {}", e)));
+        }
+        if let Err(e) = validation::validate_amount(transfer.amount) {
+            return HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!("Invalid amount: {}", e)));
+        }
+        
+        // Create transaction signature (simplified)
+        let signature = format!("sig_{}", uuid::Uuid::new_v4());
+        
+        batch_items.push(crate::batch::BatchTransferItem {
+            from_wallet_id: transfer.from_wallet_id,
+            to_wallet_id: transfer.to_wallet_id,
+            token_symbol: transfer.token_symbol.clone(),
+            amount: transfer.amount,
+            fee: transfer.fee,
+            signature,
+        });
+    }
+    
+    match BatchOperations::batch_transfer(&db, batch_items).await {
+        Ok(tx_ids) => {
+            let response_time = start.elapsed().as_millis() as u64;
+            metrics.record_response_time(response_time);
+            metrics.increment_success();
+            metrics.increment_transactions();
+            log::info!("Batch transfer completed: {} transactions ({}ms)", tx_ids.len(), response_time);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "transaction_ids": tx_ids,
+                "count": tx_ids.len(),
+                "response_time_ms": response_time
+            })))
+        },
+        Err(e) => {
+            metrics.increment_failure();
+            log::error!("Batch transfer failed: {}", e);
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
+        },
+    }
+}
+
+pub async fn batch_swap(
+    metrics: web::Data<Metrics>,
+    req: web::Json<BatchSwapRequest>
+) -> impl Responder {
+    let start = Instant::now();
+    metrics.increment_requests();
+    
+    if req.swaps.is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("No swaps provided".into()));
+    }
+    
+    if req.swaps.len() > 50 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error("Maximum 50 swaps per batch".into()));
+    }
+    
+    log::info!("Processing batch swap: {} swaps", req.swaps.len());
+    
+    // Convert to batch items
+    let batch_items: Vec<crate::batch::BatchSwapItem> = req.swaps.iter().map(|s| {
+        crate::batch::BatchSwapItem {
+            token_in: s.token_in.clone(),
+            token_out: s.token_out.clone(),
+            amount_in: s.amount_in,
+        }
+    }).collect();
+    
+    match BatchOperations::batch_swap(batch_items).await {
+        Ok(results) => {
+            let response_time = start.elapsed().as_millis() as u64;
+            metrics.record_response_time(response_time);
+            metrics.increment_success();
+            metrics.increment_swaps();
+            log::info!("Batch swap completed: {} swaps ({}ms)", results.len(), response_time);
+            HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "results": results,
+                "count": results.len(),
+                "response_time_ms": response_time
+            })))
+        },
+        Err(e) => {
+            metrics.increment_failure();
+            log::error!("Batch swap failed: {}", e);
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
+        },
+    }
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/health").route(web::get().to(health_check))
@@ -1664,5 +1880,20 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
     .service(
         web::resource("/mobile/biometric/verify").route(web::post().to(verify_biometric))
+    )
+    // Batch Operations Routes
+    .service(
+        web::resource("/batch/transfer").route(web::post().to(batch_transfer))
+    )
+    .service(
+        web::resource("/batch/swap").route(web::post().to(batch_swap))
+    )
+    // Metrics Routes
+    .service(
+        web::resource("/metrics").route(web::get().to(get_metrics))
+    )
+    // WebSocket Route
+    .service(
+        web::resource("/ws").route(web::get().to(crate::websocket::websocket_handler))
     );
 }

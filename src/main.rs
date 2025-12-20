@@ -15,8 +15,13 @@ mod mobile;
 mod config;
 mod validation;
 mod errors;
+mod middleware;
+mod cache;
+mod metrics;
+mod batch;
+mod websocket;
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpServer, middleware::Logger};
 use db::Database;
 use actix_cors::Cors;
 use std::sync::{Arc, Mutex};
@@ -24,14 +29,20 @@ use tokio::sync::mpsc;
 use crate::network::P2PNode;
 use crate::vm::QVM;
 use crate::ai::QMind;
+use crate::cache::CacheManager;
+use crate::metrics::Metrics;
+use crate::middleware::{RateLimiter, RequestIdMiddleware, SecurityHeadersMiddleware};
 
 // Shared State
 pub struct AppState {
     pub db: Database,
     pub vm: Arc<Mutex<QVM>>,
-    pub ai: Arc<Mutex<QMind>>, // AI Motoru Eklendi
+    pub ai: Arc<Mutex<QMind>>,
     pub network_tx: mpsc::Sender<String>, 
     pub connected_peers: Arc<Mutex<Vec<String>>>,
+    pub cache: CacheManager,
+    pub metrics: Metrics,
+    pub rate_limiter: RateLimiter,
 }
 
 #[tokio::main]
@@ -60,6 +71,13 @@ async fn main() -> std::io::Result<()> {
     let ai = Arc::new(Mutex::new(QMind::new()));
     log::info!("✅ Q-VM and Q-Mind initialized");
 
+    // 2.5. Initialize Cache & Metrics
+    log::info!("📊 Initializing Cache & Metrics...");
+    let cache = CacheManager::new();
+    let metrics = Metrics::new();
+    let rate_limiter = RateLimiter::new(1000, 60); // 1000 requests per minute
+    log::info!("✅ Cache & Metrics initialized");
+
     // 3. Start P2P Network
     log::info!("🌐 Bootstrapping P2P Network...");
     let mut p2p_node = P2PNode::new(config.node_id.as_deref()).await
@@ -82,11 +100,29 @@ async fn main() -> std::io::Result<()> {
         ai,
         network_tx: tx,
         connected_peers,
+        cache: cache.clone(),
+        metrics: metrics.clone(),
+        rate_limiter: rate_limiter.clone(),
+    });
+
+    // Start cache cleanup task
+    let cache_clone = cache.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            cache_clone.prices.cleanup_expired().await;
+            cache_clone.pools.cleanup_expired().await;
+            cache_clone.blocks.cleanup_expired().await;
+        }
     });
 
     // 4. Start API Server
     let bind_addr = config.bind_address();
     log::info!("🚀 Starting API Server at http://{}", bind_addr);
+    log::info!("🛡️  Security: Rate limiting enabled (1000 req/min)");
+    log::info!("⚡ Performance: Caching enabled");
+    log::info!("📊 Monitoring: Metrics collection enabled");
     
     HttpServer::new(move || {
         let cors = if config.enable_cors {
@@ -96,12 +132,19 @@ async fn main() -> std::io::Result<()> {
         };
 
         App::new()
+            .wrap(Logger::default())
+            .wrap(SecurityHeadersMiddleware)
+            .wrap(RequestIdMiddleware)
             .wrap(cors)
             .app_data(app_state.clone())
-            .app_data(web::Data::new(app_state.db.clone())) 
+            .app_data(web::Data::new(app_state.db.clone()))
+            .app_data(web::Data::new(app_state.cache.clone()))
+            .app_data(web::Data::new(app_state.metrics.clone()))
+            .app_data(web::Data::new(app_state.rate_limiter.clone()))
             .configure(api::config)
     })
     .bind(&bind_addr)?
+    .workers(num_cpus::get().min(8)) // Use up to 8 CPU cores for optimal performance
     .run()
     .await
 }

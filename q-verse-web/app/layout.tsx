@@ -1,6 +1,7 @@
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import ClientErrorBoundary from "@/components/ClientErrorBoundary";
 
 // Simple metadata to avoid heavy server processing
 export const metadata = {
@@ -16,11 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[#0a0a0f] text-white font-sans antialiased">
-        <Navbar />
-        <main className="min-h-screen pt-20">
-            {children}
-        </main>
-        <Footer />
+        <ClientErrorBoundary>
+          <Navbar />
+          <main className="min-h-screen pt-20">
+              {children}
+          </main>
+          <Footer />
+        </ClientErrorBoundary>
       </body>
     </html>
   );
