@@ -131,9 +131,9 @@ for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
     # Upload Code
     ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "rm -rf /tmp/qverse_upload && mkdir -p /tmp/qverse_upload/src /tmp/qverse_upload/scripts"
     
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no Cargo.toml "$SSH_USER@$ip":/tmp/qverse_upload/
+    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no Cargo.toml Cargo.lock "$SSH_USER@$ip":/tmp/qverse_upload/ 2>/dev/null || scp -i "$SSH_KEY" -o StrictHostKeyChecking=no Cargo.toml "$SSH_USER@$ip":/tmp/qverse_upload/
     # Upload src directory recursively
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -r src "$SSH_USER@$ip":/tmp/qverse_upload/
+    rsync -avz -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" --exclude 'target' --exclude '.git' src/ "$SSH_USER@$ip":/tmp/qverse_upload/src/
     
     # Upload Install Script
     scp -i "$SSH_KEY" -o StrictHostKeyChecking=no scripts/deployment/install_qverse_server.sh "$SSH_USER@$ip":/tmp/install_qverse.sh
