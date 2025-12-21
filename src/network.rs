@@ -10,9 +10,28 @@ use tokio::sync::mpsc;
 // Bu yapı, düğümlerin (nodes) birbirini nasıl bulacağını ve konuşacağını belirler.
 // USDTgVerse'deki statik IP listesi yerine, biz dinamik keşif (mDNS) ve Gossip (Dedikodu) protokolü kullanıyoruz.
 #[derive(NetworkBehaviour)]
+#[behaviour(out_event = "QVerseBehaviourEvent")]
 pub struct QVerseBehaviour {
     pub gossipsub: gossipsub::Behaviour,
     pub mdns: mdns::tokio::Behaviour,
+}
+
+#[derive(Debug)]
+pub enum QVerseBehaviourEvent {
+    Gossipsub(gossipsub::Event),
+    Mdns(mdns::Event),
+}
+
+impl From<gossipsub::Event> for QVerseBehaviourEvent {
+    fn from(event: gossipsub::Event) -> Self {
+        QVerseBehaviourEvent::Gossipsub(event)
+    }
+}
+
+impl From<mdns::Event> for QVerseBehaviourEvent {
+    fn from(event: mdns::Event) -> Self {
+        QVerseBehaviourEvent::Mdns(event)
+    }
 }
 
 pub struct P2PNode {
@@ -80,15 +99,20 @@ impl P2PNode {
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("👂 Listening on {:?}", address);
                     }
-                    SwarmEvent::Behaviour(QVerseBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
-                        for (peer_id, _multiaddr) in list {
-                            println!("👋 Discovered new peer: {:?}", peer_id);
-                            self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    SwarmEvent::Behaviour(event) => {
+                        match event {
+                            QVerseBehaviourEvent::Mdns(mdns::Event::Discovered(list)) => {
+                                for (peer_id, _multiaddr) in list {
+                                    println!("👋 Discovered new peer: {:?}", peer_id);
+                                    self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                                }
+                            }
+                            QVerseBehaviourEvent::Gossipsub(gossipsub::Event::Message { propagation_source, message_id, message }) => {
+                                println!("📨 Received message from {:?}: {:?}", propagation_source, String::from_utf8_lossy(&message.data));
+                                // Burada gelen Blok veya Transaction verisini işleyeceğiz.
+                            }
+                            _ => {}
                         }
-                    }
-                    SwarmEvent::Behaviour(QVerseBehaviourEvent::Gossipsub(gossipsub::Event::Message { propagation_source, message_id, message })) => {
-                        println!("📨 Received message from {:?}: {:?}", propagation_source, String::from_utf8_lossy(&message.data));
-                        // Burada gelen Blok veya Transaction verisini işleyeceğiz.
                     }
                     _ => {}
                 },
