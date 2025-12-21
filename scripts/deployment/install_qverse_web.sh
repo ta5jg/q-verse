@@ -43,32 +43,69 @@ pm2 start npm --name "q-verse-web" -- start -- -p 3000
 pm2 save
 pm2 startup | bash || true
 
-# Nginx Config
-rm -f /etc/nginx/sites-enabled/default
+# Nginx Config - Q-Verse.org ONLY (separate from usdtgverse.com)
 cat > /etc/nginx/sites-available/q-verse.org <<NGINX
+# Q-Verse.org - Next.js Frontend (NO default_server - only for q-verse.org domain)
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name q-verse.org www.q-verse.org 159.203.83.98;
+    listen 80;
+    listen [::]:80;
+    server_name q-verse.org www.q-verse.org;
 
+    # Backend API - MUST be before location / to match first
+    location /api/ {
+        proxy_pass http://localhost:8080/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # WebSocket support
+    location /ws {
+        proxy_pass http://localhost:8080/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \"upgrade\";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+    
+    # Swagger UI
+    location /swagger-ui/ {
+        proxy_pass http://localhost:8080/swagger-ui/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    # Frontend (Next.js) - MUST be last
     location / {
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-    }
-    
-    location /api/ {
-        proxy_pass http://localhost:8080/; 
-        proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 }
 NGINX
 
-ln -sf /etc/nginx/sites-available/q-verse.org /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/q-verse.org /etc/nginx/sites-enabled/q-verse.org
 nginx -t && systemctl reload nginx
 
 # SSL
