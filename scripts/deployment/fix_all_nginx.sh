@@ -1,51 +1,35 @@
 #!/bin/bash
 set -e
 
-echo "🌐 Installing Q-Verse Web..." >> /var/log/qverse_web_install.log
+# Droplets
+NYC3_IP="159.203.83.98"
+SFO2_IP="157.245.225.95"
+FRA1_IP="104.248.251.209"
 
-# Install PM2 if missing
-if ! command -v pm2 &> /dev/null; then
-    npm install -g pm2
+SSH_USER="root"
+if [ -f "$HOME/.ssh/id_ed25519" ]; then
+    SSH_KEY="$HOME/.ssh/id_ed25519"
+elif [ -f "$HOME/.ssh/id_rsa" ]; then
+    SSH_KEY="$HOME/.ssh/id_rsa"
+else
+    echo "❌ SSH key not found"
+    exit 1
 fi
 
-# Setup Dir
-mkdir -p /opt/q-verse-web
+echo "🔧 Fixing Nginx Configuration on All Servers..."
 
-# Move files
-if [ -d "/tmp/qverse_web_upload" ]; then
-    rm -rf /opt/q-verse-web/.next
-    # Don't delete public if not uploaded to save bandwidth, but here we wipe clean to be safe
-    # Actually, we should sync source code
+for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
+    IFS=':' read -r name ip <<< "$server"
+    echo "----------------------------------------"
+    echo "🔧 Fixing Nginx on $name ($ip)..."
     
-    # Sync source files
-    cp -r /tmp/qverse_web_upload/* /opt/q-verse-web/
-fi
+    if ! ssh -i "$SSH_KEY" -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$SSH_USER@$ip" echo "OK" &> /dev/null; then
+        echo "⚠️ Skipping $name"
+        continue
+    fi
 
-cd /opt/q-verse-web
-
-# Install Deps (Legacy Peer Deps for React 19 compat)
-echo "📦 Installing Dependencies..." >> /var/log/qverse_web_install.log
-rm -rf node_modules package-lock.json .next
-npm install --legacy-peer-deps
-
-# Build with RAM Limit
-echo "🛠 Building..." >> /var/log/qverse_web_install.log
-export NODE_OPTIONS="--max-old-space-size=4096"
-npm run build >> /var/log/qverse_web_install.log 2>&1
-
-# Fix Permissions
-chmod -R 755 /opt/q-verse-web
-
-# Start App
-echo "🚀 Starting App..." >> /var/log/qverse_web_install.log
-pm2 delete q-verse-web || true
-pm2 start npm --name "q-verse-web" -- start -- -p 3000
-pm2 save
-pm2 startup | bash || true
-
-# Nginx Config
-rm -f /etc/nginx/sites-enabled/default
-cat > /etc/nginx/sites-available/q-verse.org <<NGINX
+    # Upload fixed Nginx config
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "cat > /etc/nginx/sites-available/q-verse.org <<'NGINXCONF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -69,7 +53,7 @@ server {
         proxy_pass http://localhost:8080/ws;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \"upgrade\";
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -103,12 +87,23 @@ server {
         proxy_read_timeout 60s;
     }
 }
-NGINX
+NGINXCONF
+"
 
-ln -sf /etc/nginx/sites-available/q-verse.org /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
+    # Enable config
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "
+        ln -sf /etc/nginx/sites-available/q-verse.org /etc/nginx/sites-enabled/q-verse.org
+        nginx -t && systemctl reload nginx && echo '✅ Nginx reloaded successfully' || echo '❌ Nginx reload failed'
+    "
+    
+    # Check backend
+    echo "🔍 Verifying backend on $name..."
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$ip" "
+        systemctl status q-verse-core --no-pager | head -3 || echo 'Backend not running'
+        curl -s http://localhost:8080/api/health | head -c 100 || echo 'Backend not responding'
+    "
+    
+    echo "✅ $name fixed."
+done
 
-# SSL
-certbot --nginx -d q-verse.org -d www.q-verse.org --non-interactive --agree-tos --register-unsafely-without-email --redirect --reinstall || true
-
-echo "✅ Q-Verse Live!" >> /var/log/qverse_web_install.log
+echo "🎉 Nginx configuration fixed on all servers!"
