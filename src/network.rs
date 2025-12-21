@@ -19,7 +19,7 @@ pub struct QVerseBehaviour {
 #[derive(Debug)]
 pub enum QVerseBehaviourEvent {
     Gossipsub(gossipsub::Event),
-    Mdns(mdns::Event),
+    Mdns(mdns::tokio::Event),
 }
 
 impl From<gossipsub::Event> for QVerseBehaviourEvent {
@@ -28,8 +28,8 @@ impl From<gossipsub::Event> for QVerseBehaviourEvent {
     }
 }
 
-impl From<mdns::Event> for QVerseBehaviourEvent {
-    fn from(event: mdns::Event) -> Self {
+impl From<mdns::tokio::Event> for QVerseBehaviourEvent {
+    fn from(event: mdns::tokio::Event) -> Self {
         QVerseBehaviourEvent::Mdns(event)
     }
 }
@@ -101,7 +101,7 @@ impl P2PNode {
                     }
                     SwarmEvent::Behaviour(event) => {
                         match event {
-                            QVerseBehaviourEvent::Mdns(mdns::Event::Discovered(list)) => {
+                            QVerseBehaviourEvent::Mdns(mdns::tokio::Event::Discovered(list)) => {
                                 for (peer_id, _multiaddr) in list {
                                     println!("👋 Discovered new peer: {:?}", peer_id);
                                     self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);

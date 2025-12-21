@@ -75,6 +75,7 @@ Restart=always
 RestartSec=5
 Environment="RUST_LOG=info"
 Environment="PORT=8080"
+Environment="API_HOST=0.0.0.0"
 Environment="DATABASE_URL=${DB_URL}"
 
 [Install]
