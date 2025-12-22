@@ -9,7 +9,7 @@ use crate::models::{
 #[openapi(
     paths(
         crate::api::health_check,
-        crate::api::get_metrics,
+        crate::api::get_metrics
         // Temporarily comment out handlers without utoipa::path attributes
         // crate::api::create_user,
         // crate::api::get_balance,
