@@ -1105,7 +1105,7 @@ pub async fn stake_yield(data: web::Data<AppState>,
     let position_id = Uuid::new_v4().to_string();
     
     // Create yield position
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO yield_positions (id, pool_id, wallet_id, staked_amount)
          VALUES (?, ?, ?, ?)"
     )
@@ -1114,9 +1114,11 @@ pub async fn stake_yield(data: web::Data<AppState>,
     .bind(req.wallet_id.to_string())
     .bind(req.amount)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "position_id": position_id,
@@ -1176,7 +1178,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
         Some(c) => {
             let claim_id = Uuid::new_v4().to_string();
             
-            sqlx::query(
+            let result = sqlx::query(
                 "INSERT INTO airdrop_claims (id, campaign_id, wallet_id, amount, merkle_proof)
                  VALUES (?, ?, ?, ?, ?)"
             )
@@ -1186,9 +1188,11 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
             .bind(c.per_claim)
             .bind(req.merkle_proof.as_ref())
             .execute(&data.db.pool)
-            .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+            .await;
+            
+            if let Err(e) = result {
+                return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+            }
             
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "claim_id": claim_id,
@@ -1212,7 +1216,7 @@ pub async fn create_multisig_wallet(data: web::Data<AppState>,
     };
     
     // Save multisig wallet
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO multisig_wallets (id, address, threshold, total_signers)
          VALUES (?, ?, ?, ?)"
     )
@@ -1221,9 +1225,11 @@ pub async fn create_multisig_wallet(data: web::Data<AppState>,
     .bind(multisig.threshold)
     .bind(multisig.total_signers)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     // Save signers
     for wallet_id in &req.signer_wallet_ids {
@@ -1259,7 +1265,7 @@ pub async fn sign_multisig_transaction(data: web::Data<AppState>,
     let signature_id = Uuid::new_v4().to_string();
     
     // Add signature
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO multisig_signatures (id, multisig_tx_id, signer_wallet_id, signature)
          VALUES (?, ?, ?, ?)"
     )
@@ -1268,9 +1274,11 @@ pub async fn sign_multisig_transaction(data: web::Data<AppState>,
     .bind(req.signer_wallet_id.to_string())
     .bind(&req.signature)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     // Update signature count
     let count: i32 = sqlx::query_scalar(
@@ -1336,7 +1344,7 @@ pub async fn create_payment_request(data: web::Data<AppState>,
     }
     
     // Save payment request
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO payment_requests (id, from_wallet_id, to_address, token_symbol, amount, memo, qr_code_data, status, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
@@ -1350,9 +1358,11 @@ pub async fn create_payment_request(data: web::Data<AppState>,
     .bind(&payment.status)
     .bind(payment.expires_at)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success(payment))
 }
@@ -1390,7 +1400,7 @@ pub async fn compile_contract(data: web::Data<AppState>,
     };
     
     // Save to DB
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO compiled_contracts (id, contract_name, wasm_hex, source_code, compiler_version, gas_estimate)
          VALUES (?, ?, ?, ?, ?, ?)"
     )
@@ -1401,9 +1411,11 @@ pub async fn compile_contract(data: web::Data<AppState>,
     .bind(compiled.compiler_version.as_ref())
     .bind(compiled.gas_estimate)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success(compiled))
 }
@@ -1462,9 +1474,11 @@ pub async fn deploy_contract(data: web::Data<AppState>,
             .bind(req.deployer_wallet_id.to_string())
             .bind(&address)
             .execute(&data.db.pool)
-            .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+            .await;
+            
+            if let Err(e) = result {
+                return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+            }
             
             let deployed = DeployedContract {
                 id: deploy_id,
@@ -1539,9 +1553,11 @@ pub async fn register_device(data: web::Data<AppState>,
     .bind(&device.platform)
     .bind(device.app_version.as_ref())
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success(device))
 }
@@ -1613,9 +1629,11 @@ pub async fn enable_biometric(data: web::Data<AppState>,
     .bind(&biometric.biometric_type)
     .bind(&biometric.public_key)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success(biometric))
 }
