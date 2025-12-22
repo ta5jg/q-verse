@@ -1184,7 +1184,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
 
 // --- WALLET ENHANCEMENT HANDLERS ---
 
-pub async fn create_multisig(data: web::Data<AppState>,
+pub async fn create_multisig_wallet(data: web::Data<AppState>,
     req: web::Json<CreateMultiSigRequest>
 ) -> impl Responder {
     let signers: Vec<String> = req.signer_wallet_ids.iter().map(|id| id.to_string()).collect();
