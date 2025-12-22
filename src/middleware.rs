@@ -150,21 +150,22 @@ where
             let mut res = service.borrow_mut().call(req).await?;
             
             // Add security headers
+            use actix_web::http::header::{HeaderName, HeaderValue};
             res.headers_mut().insert(
-                actix_web::http::header::HeaderName::from_static("x-content-type-options"),
-                actix_web::http::HeaderValue::from_static("nosniff"),
+                HeaderName::from_static("x-content-type-options"),
+                HeaderValue::from_static("nosniff"),
             );
             res.headers_mut().insert(
-                actix_web::http::header::HeaderName::from_static("x-frame-options"),
-                actix_web::http::HeaderValue::from_static("DENY"),
+                HeaderName::from_static("x-frame-options"),
+                HeaderValue::from_static("DENY"),
             );
             res.headers_mut().insert(
-                actix_web::http::header::HeaderName::from_static("x-xss-protection"),
-                actix_web::http::HeaderValue::from_static("1; mode=block"),
+                HeaderName::from_static("x-xss-protection"),
+                HeaderValue::from_static("1; mode=block"),
             );
             res.headers_mut().insert(
-                actix_web::http::header::HeaderName::from_static("strict-transport-security"),
-                actix_web::http::HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+                HeaderName::from_static("strict-transport-security"),
+                HeaderValue::from_static("max-age=31536000; includeSubDomains"),
             );
             
             Ok(res)

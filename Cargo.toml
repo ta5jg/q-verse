@@ -19,7 +19,7 @@ serde_json = "1.0"
 # Database
 # Using 0.7 to ensure maximum compatibility with current async runtime if 0.8 caused issues, 
 # but ensuring features are correct.
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "sqlite", "time", "uuid"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "sqlite", "time", "uuid", "chrono"] }
 
 # Cryptography (Quantum Safe)
 pqcrypto-dilithium = "0.5.0"

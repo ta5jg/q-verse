@@ -1,5 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use crate::models::{ApiResponse, TokenSymbol, Wallet, Transaction, LiquidityPool, Order, Trade};
+use crate::developer::{CompiledContract, DeployedContract};
+use crate::mobile::MobileDevice;
 use crate::db::Database;
 use crate::AppState; // Now defined in lib.rs
 use crate::exchange::{AMM, OrderMatcher};
@@ -1665,7 +1667,7 @@ pub async fn batch_transfer(data: web::Data<AppState>,
         });
     }
     
-    match BatchOperations::batch_transfer(&db, batch_items).await {
+    match BatchOperations::batch_transfer(&data.db, batch_items).await {
         Ok(tx_ids) => {
             let response_time = start.elapsed().as_millis() as u64;
             data.metrics.record_response_time(response_time);
