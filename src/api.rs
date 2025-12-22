@@ -1,7 +1,8 @@
 use actix_web::{web, HttpResponse, Responder};
 use crate::models::{ApiResponse, TokenSymbol, Wallet, Transaction, LiquidityPool, Order, Trade};
 use crate::db::Database;
-use crate::AppState;
+// AppState is defined in main.rs, not accessible from lib.rs
+// We'll use web::Data<AppState> directly in handlers
 use crate::exchange::{AMM, OrderMatcher};
 use crate::wallet::{MultiSigManager, QRCodeGenerator, PaymentGateway};
 use crate::developer::{ContractCompiler, FormalVerifier, SDKGenerator};
@@ -260,7 +261,7 @@ pub async fn analyze_tx(
 }
 
 pub async fn stake(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<StakeRequest>
 ) -> impl Responder {
     match db.stake_tokens(req.wallet_id, req.amount).await {
@@ -304,7 +305,7 @@ pub async fn get_metrics(
 }
 
 pub async fn create_user(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CreateUserRequest>
 ) -> impl Responder {
     // Validate input
@@ -339,7 +340,7 @@ pub async fn create_user(
 }
 
 pub async fn get_balance(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     path: web::Path<(Uuid, String)>
 ) -> impl Responder {
     let (wallet_id, token_str) = path.into_inner();
@@ -350,7 +351,7 @@ pub async fn get_balance(
 }
 
 pub async fn transfer(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     metrics: web::Data<Metrics>,
     req: web::Json<TransferRequest>
 ) -> impl Responder {
@@ -434,7 +435,7 @@ pub async fn transfer(
 }
 
 pub async fn get_stake_info(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
@@ -448,7 +449,7 @@ pub async fn get_stake_info(
 }
 
 pub async fn get_transactions(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
@@ -513,7 +514,7 @@ pub async fn verify_iso20022(
 // --- EXCHANGE HANDLERS ---
 
 pub async fn swap_tokens(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -607,7 +608,7 @@ pub async fn swap_tokens(
 }
 
 pub async fn get_liquidity_pools(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     cache: web::Data<CacheManager>
 ) -> impl Responder {
     // Check cache
@@ -643,7 +644,7 @@ pub async fn get_liquidity_pools(
 }
 
 pub async fn create_order(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CreateOrderRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -699,7 +700,7 @@ pub async fn create_order(
 }
 
 pub async fn get_orderbook(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     path: web::Path<String>
 ) -> impl Responder {
     let pair = path.into_inner();
@@ -746,7 +747,7 @@ pub async fn get_orderbook(
 // --- BRIDGE HANDLERS ---
 
 pub async fn bridge_assets(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<BridgeRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -804,7 +805,7 @@ pub async fn bridge_assets(
 // --- EXPLORER HANDLERS ---
 
 pub async fn get_block(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     path: web::Path<i64>
 ) -> impl Responder {
     let block_number = path.into_inner();
@@ -826,7 +827,7 @@ pub async fn get_block(
 }
 
 pub async fn search_explorer(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     query: web::Query<std::collections::HashMap<String, String>>
 ) -> impl Responder {
     let search_term = query.get("q").unwrap_or(&"".to_string()).clone();
@@ -841,7 +842,7 @@ pub async fn search_explorer(
 // --- ORACLE HANDLERS ---
 
 pub async fn get_price(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     cache: web::Data<CacheManager>,
     path: web::Path<String>
 ) -> impl Responder {
@@ -885,7 +886,7 @@ pub async fn get_price(
 }
 
 pub async fn update_price(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<UpdatePriceRequest>
 ) -> impl Responder {
     let feed_id = Uuid::new_v4().to_string();
@@ -924,7 +925,7 @@ pub async fn update_price(
 // --- GOVERNANCE HANDLERS ---
 
 pub async fn create_proposal(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CreateProposalRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -969,7 +970,7 @@ pub async fn create_proposal(
 }
 
 pub async fn vote_proposal(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<VoteRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -1102,7 +1103,7 @@ pub async fn get_proposals(
 // --- YIELD FARMING HANDLERS ---
 
 pub async fn stake_yield(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<StakeYieldRequest>
 ) -> impl Responder {
     let position_id = Uuid::new_v4().to_string();
@@ -1148,7 +1149,7 @@ pub async fn get_yield_pools(
 // --- AIRDROP HANDLERS ---
 
 pub async fn claim_airdrop(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<ClaimAirdropRequest>
 ) -> impl Responder {
     // Check if already claimed
@@ -1205,7 +1206,7 @@ pub async fn claim_airdrop(
 // --- WALLET ENHANCEMENT HANDLERS ---
 
 pub async fn create_multisig(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CreateMultiSigRequest>
 ) -> impl Responder {
     let signers: Vec<String> = req.signer_wallet_ids.iter().map(|id| id.to_string()).collect();
@@ -1257,7 +1258,7 @@ pub async fn create_multisig(
 }
 
 pub async fn sign_multisig(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<SignMultiSigRequest>
 ) -> impl Responder {
     let signature_id = Uuid::new_v4().to_string();
@@ -1323,7 +1324,7 @@ pub async fn sign_multisig(
 }
 
 pub async fn create_payment_request(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CreatePaymentRequest>
 ) -> impl Responder {
     let payment = PaymentGateway::create_payment_request(
@@ -1379,7 +1380,7 @@ pub async fn scan_qr_code(
 // --- DEVELOPER TOOLS HANDLERS ---
 
 pub async fn compile_contract(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<CompileContractRequest>
 ) -> impl Responder {
     // Validate source
@@ -1412,7 +1413,7 @@ pub async fn compile_contract(
 }
 
 pub async fn verify_contract(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<VerifyContractRequest>
 ) -> impl Responder {
     // Get compiled contract
@@ -1437,7 +1438,7 @@ pub async fn verify_contract(
 }
 
 pub async fn deploy_contract(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<DeployContractRequest>
 ) -> impl Responder {
     // Get compiled contract
@@ -1486,7 +1487,7 @@ pub async fn deploy_contract(
 }
 
 pub async fn generate_sdk(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<GenerateSDKRequest>
 ) -> impl Responder {
     // Get deployed contract
@@ -1519,7 +1520,7 @@ pub async fn generate_sdk(
 // --- MOBILE INTEGRATION HANDLERS ---
 
 pub async fn register_device(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<RegisterDeviceRequest>
 ) -> impl Responder {
     // Validate device token
@@ -1552,7 +1553,7 @@ pub async fn register_device(
 }
 
 pub async fn send_notification(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<SendNotificationRequest>
 ) -> impl Responder {
     // Get all devices for wallet
@@ -1601,7 +1602,7 @@ pub async fn send_notification(
 }
 
 pub async fn enable_biometric(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<EnableBiometricRequest>
 ) -> impl Responder {
     let biometric = BiometricAuthManager::enable_biometric(
@@ -1627,7 +1628,7 @@ pub async fn enable_biometric(
 }
 
 pub async fn verify_biometric(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     req: web::Json<VerifyBiometricRequest>
 ) -> impl Responder {
     // Get biometric auth
@@ -1659,7 +1660,7 @@ pub async fn verify_biometric(
 // --- BATCH OPERATIONS HANDLERS ---
 
 pub async fn batch_transfer(
-    db: web::Data<Database>,
+    _db: web::Data<Database>,
     metrics: web::Data<Metrics>,
     req: web::Json<BatchTransferRequest>
 ) -> impl Responder {
