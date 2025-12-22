@@ -27,7 +27,7 @@ use db::Database;
 use actix_cors::Cors;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use crate::network::P2PNode;
+// use crate::network::P2PNode; // Temporarily disabled
 use crate::vm::QVM;
 use crate::ai::QMind;
 use crate::cache::CacheManager;
@@ -79,19 +79,20 @@ async fn main() -> std::io::Result<()> {
     let rate_limiter = RateLimiter::new(1000, 60); // 1000 requests per minute
     log::info!("✅ Cache & Metrics initialized");
 
-    // 3. Start P2P Network
-    log::info!("🌐 Bootstrapping P2P Network...");
-    let mut p2p_node = P2PNode::new(config.node_id.as_deref()).await
-        .expect("Failed to create P2P node");
+    // 3. Start P2P Network (Temporarily disabled)
+    // log::info!("🌐 Bootstrapping P2P Network...");
+    // let mut p2p_node = P2PNode::new(config.node_id.as_deref()).await
+    //     .expect("Failed to create P2P node");
     
     let (tx, _rx) = mpsc::channel(32); 
     
-    tokio::spawn(async move {
-        if let Err(e) = p2p_node.start().await {
-            log::error!("❌ P2P Network Error: {}", e);
-        }
-    });
-    log::info!("✅ P2P Network started");
+    // tokio::spawn(async move {
+    //     if let Err(e) = p2p_node.start().await {
+    //         log::error!("❌ P2P Network Error: {}", e);
+    //     }
+    // });
+    // log::info!("✅ P2P Network started");
+    log::info!("⚠️  P2P Network temporarily disabled");
 
     let connected_peers = Arc::new(Mutex::new(vec![]));
 
