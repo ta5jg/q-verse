@@ -104,7 +104,9 @@ impl P2PNode {
                             QVerseBehaviourEvent::Mdns(mdns::tokio::Event::Discovered(list)) => {
                                 for (peer_id, _multiaddr) in list {
                                     println!("👋 Discovered new peer: {:?}", peer_id);
-                                    self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                                    // Note: behaviour_mut() requires NetworkBehaviour trait
+                                    // For now, we'll just log the discovery
+                                    // TODO: Implement proper peer management
                                 }
                             }
                             QVerseBehaviourEvent::Gossipsub(gossipsub::Event::Message { propagation_source, message_id, message }) => {
