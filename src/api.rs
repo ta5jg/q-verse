@@ -512,6 +512,7 @@ pub async fn verify_iso20022(
 pub async fn swap_tokens(data: web::Data<AppState>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
+    let start = Instant::now();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
@@ -871,7 +872,7 @@ pub async fn get_price(data: web::Data<AppState>,
     }
 }
 
-pub async fn update_price(data: web::Data<AppState>,
+pub async fn update_price_feed(data: web::Data<AppState>,
     req: web::Json<UpdatePriceRequest>
 ) -> impl Responder {
     let feed_id = Uuid::new_v4().to_string();
@@ -1184,7 +1185,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
 
 // --- WALLET ENHANCEMENT HANDLERS ---
 
-pub async fn create_multisig_wallet(data: web::Data<AppState>,
+pub async fn create_multisig(data: web::Data<AppState>,
     req: web::Json<CreateMultiSigRequest>
 ) -> impl Responder {
     let signers: Vec<String> = req.signer_wallet_ids.iter().map(|id| id.to_string()).collect();
@@ -1235,7 +1236,7 @@ pub async fn create_multisig_wallet(data: web::Data<AppState>,
     HttpResponse::Ok().json(ApiResponse::success(multisig))
 }
 
-pub async fn sign_multisig(data: web::Data<AppState>,
+pub async fn sign_multisig_transaction(data: web::Data<AppState>,
     req: web::Json<SignMultiSigRequest>
 ) -> impl Responder {
     let signature_id = Uuid::new_v4().to_string();

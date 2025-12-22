@@ -148,13 +148,29 @@ pub struct User {
 }
 
 // 👛 Wallet Model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Wallet {
     pub id: Uuid,
     pub user_id: Uuid,
     pub address: String,
     pub public_key: String,
     pub created_at: DateTime<Utc>,
+}
+
+impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for Wallet {
+    fn from_row(row: &'r sqlx::sqlite::SqliteRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+        Ok(Wallet {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            address: row.get("address"),
+            public_key: row.get("public_key"),
+            created_at: {
+                let timestamp: i64 = row.get("created_at");
+                DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now())
+            },
+        })
+    }
 }
 
 impl Wallet {
