@@ -297,6 +297,21 @@ pub struct LiquidityPool {
     pub fee_rate: f64,
 }
 
+impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for LiquidityPool {
+    fn from_row(row: &'r sqlx::sqlite::SqliteRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+        Ok(LiquidityPool {
+            id: row.get("id"),
+            token_a: row.get("token_a"),
+            token_b: row.get("token_b"),
+            reserve_a: row.get("reserve_a"),
+            reserve_b: row.get("reserve_b"),
+            total_supply: row.get("total_supply"),
+            fee_rate: row.get("fee_rate"),
+        })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum OrderSide {
     Buy,
