@@ -1464,7 +1464,7 @@ pub async fn deploy_contract(data: web::Data<AppState>,
             let deploy_id = Uuid::new_v4().to_string();
             
             // Save deployed contract
-            sqlx::query(
+            let result = sqlx::query(
                 "INSERT INTO deployed_contracts (id, contract_id, compiled_contract_id, deployer_wallet_id, address)
                  VALUES (?, ?, ?, ?, ?)"
             )
