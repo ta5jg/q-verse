@@ -886,7 +886,7 @@ pub async fn update_price_feed(data: web::Data<AppState>,
     let feed_id = Uuid::new_v4().to_string();
     
     // Add price feed
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO price_feeds (id, token_symbol, price, source) VALUES (?, ?, ?, ?)"
     )
     .bind(&feed_id)
@@ -894,12 +894,14 @@ pub async fn update_price_feed(data: web::Data<AppState>,
     .bind(req.price)
     .bind(&req.source)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     // Update aggregated price (simplified - in production, calculate average)
-    sqlx::query(
+    let result2 = sqlx::query(
         "INSERT INTO aggregated_prices (token_symbol, price, sources_count, last_updated)
          VALUES (?, ?, 1, CURRENT_TIMESTAMP)
          ON CONFLICT(token_symbol) DO UPDATE SET 
@@ -911,9 +913,11 @@ pub async fn update_price_feed(data: web::Data<AppState>,
     .bind(req.price)
     .bind(req.price)
     .execute(&data.db.pool)
-    .await
-    ;
-    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    .await;
+    
+    if let Err(e) = result2 {
+        return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
+    }
     
     HttpResponse::Ok().json(ApiResponse::success("Price updated"))
 }
