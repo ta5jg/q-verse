@@ -78,5 +78,3 @@ struct ApiDoc;
 pub fn swagger_ui() -> SwaggerUi {
     SwaggerUi::new("/swagger-ui/{_:*}").url("/api-docs/openapi.json", ApiDoc::openapi())
 }
-
-pub struct ApiDoc;

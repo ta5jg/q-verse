@@ -86,6 +86,10 @@ where
     type Error = Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
+    fn poll_ready(&self, ctx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        self.service.borrow().poll_ready(ctx)
+    }
+
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let request_id = uuid::Uuid::new_v4().to_string();
         req.extensions_mut().insert::<String>(request_id.clone());

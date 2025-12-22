@@ -8,6 +8,7 @@ edition = "2024"
 actix-web = { version = "4", features = ["rustls"] }
 actix-cors = "0.7"
 actix-web-actors = "4"
+actix = "0.13"
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["native-tls"] }
 flate2 = "1.0"
 utoipa = { version = "4.2", features = ["actix_extras", "chrono"] }
