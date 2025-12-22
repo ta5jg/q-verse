@@ -3,7 +3,7 @@ mod contracts;
 mod crypto;
 mod db;
 mod models;
-mod network;
+// mod network; // Temporarily disabled
 mod vm;
 mod compliance;
 mod ai;

@@ -5,10 +5,10 @@ edition = "2024"
 
 [dependencies]
 # Web & API
-actix-web = { version = "4", features = ["openssl"] }
+actix-web = { version = "4", features = ["rustls"] }
 actix-cors = "0.7"
 actix-web-actors = "4"
-tokio-tungstenite = "0.24"
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["native-tls"] }
 flate2 = "1.0"
 utoipa = { version = "4.2", features = ["actix_extras", "chrono"] }
 utoipa-swagger-ui = { version = "6.0", features = ["actix-web"] }
@@ -32,9 +32,8 @@ rand = "0.8"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 
-# Networking (P2P Layer)
-# Using standard features for 0.53
-libp2p = { version = "0.53", features = ["tcp", "dns", "websocket", "noise", "yamux", "gossipsub", "mdns", "kad", "tokio"] }
+# Networking (P2P Layer) - Temporarily disabled
+# libp2p = { version = "0.53", features = ["tcp", "dns", "websocket", "noise", "yamux", "gossipsub", "mdns", "kad", "tokio"] }
 
 # Smart Contract Engine (WASM)
 wasmer = "4.2" 
