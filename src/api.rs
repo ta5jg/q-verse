@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use crate::models::{ApiResponse, TokenSymbol, Wallet, Transaction, LiquidityPool, Order, Trade};
-use crate::developer::{CompiledContract, DeployedContract};
+use crate::models::{CompiledContract, DeployedContract};
 use crate::mobile::MobileDevice;
 use crate::db::Database;
 use crate::AppState; // Now defined in lib.rs
@@ -1543,7 +1543,7 @@ pub async fn register_device(data: web::Data<AppState>,
     );
     
     // Save device
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO mobile_devices (id, wallet_id, device_token, platform, app_version)
          VALUES (?, ?, ?, ?, ?)"
     )
@@ -1559,7 +1559,12 @@ pub async fn register_device(data: web::Data<AppState>,
         return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string()));
     }
     
-    HttpResponse::Ok().json(ApiResponse::success(device))
+    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+        "id": device.id,
+        "wallet_id": device.wallet_id,
+        "platform": device.platform,
+        "app_version": device.app_version
+    })))
 }
 
 pub async fn send_notification(data: web::Data<AppState>,
@@ -1656,6 +1661,10 @@ pub async fn verify_biometric(data: web::Data<AppState>,
             match BiometricAuthManager::verify_biometric(&req.challenge, &req.signature, &pk) {
                 Ok(verified) => {
                     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                "transaction_ids": tx_ids,
+                "count": tx_ids.len(),
+                "response_time_ms": response_time
+              })))
                         "verified": verified,
                         "wallet_id": req.wallet_id
                     })))

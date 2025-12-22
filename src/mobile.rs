@@ -40,7 +40,7 @@ impl MobileDeviceManager {
     }
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub struct MobileDevice {
     pub id: String,
     pub wallet_id: String,

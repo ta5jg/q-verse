@@ -84,6 +84,7 @@ pub struct PropertyResult {
 }
 
 #[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct VerificationResult {
     pub contract_id: String,
     pub all_verified: bool,
