@@ -143,6 +143,7 @@ impl BiometricAuthManager {
 }
 
 #[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct BiometricAuth {
     pub id: String,
     pub wallet_id: String,

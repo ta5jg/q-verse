@@ -125,7 +125,7 @@ pub struct BatchSwapItem {
     pub amount_in: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BatchSwapResult {
     pub token_in: String,
     pub token_out: String,
