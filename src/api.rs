@@ -1,8 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use crate::models::{ApiResponse, TokenSymbol, Wallet, Transaction, LiquidityPool, Order, Trade};
 use crate::db::Database;
-// AppState is defined in main.rs, not accessible from lib.rs
-// We'll use web::Data<AppState> directly in handlers
+use crate::AppState; // Now defined in lib.rs
 use crate::exchange::{AMM, OrderMatcher};
 use crate::wallet::{MultiSigManager, QRCodeGenerator, PaymentGateway};
 use crate::developer::{ContractCompiler, FormalVerifier, SDKGenerator};

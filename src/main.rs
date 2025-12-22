@@ -33,18 +33,7 @@ use crate::ai::QMind;
 use crate::cache::CacheManager;
 use crate::metrics::Metrics;
 use crate::middleware::{RateLimiter, RequestIdMiddleware, SecurityHeadersMiddleware};
-
-// Shared State
-pub struct AppState {
-    pub db: Database,
-    pub vm: Arc<Mutex<QVM>>,
-    pub ai: Arc<Mutex<QMind>>,
-    pub network_tx: mpsc::Sender<String>, 
-    pub connected_peers: Arc<Mutex<Vec<String>>>,
-    pub cache: CacheManager,
-    pub metrics: Metrics,
-    pub rate_limiter: RateLimiter,
-}
+use crate::AppState; // Import from lib.rs
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

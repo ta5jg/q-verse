@@ -21,3 +21,24 @@ pub mod metrics;
 pub mod batch;
 pub mod websocket;
 pub mod openapi;
+
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+use crate::vm::QVM;
+use crate::ai::QMind;
+use crate::cache::CacheManager;
+use crate::metrics::Metrics;
+use crate::middleware::RateLimiter;
+use crate::db::Database;
+
+// Shared State - moved from main.rs to lib.rs so api.rs can access it
+pub struct AppState {
+    pub db: Database,
+    pub vm: Arc<Mutex<QVM>>,
+    pub ai: Arc<Mutex<QMind>>,
+    pub network_tx: mpsc::Sender<String>, 
+    pub connected_peers: Arc<Mutex<Vec<String>>>,
+    pub cache: CacheManager,
+    pub metrics: Metrics,
+    pub rate_limiter: RateLimiter,
+}
