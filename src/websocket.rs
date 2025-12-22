@@ -1,6 +1,7 @@
 use actix_web::{web, HttpRequest, HttpResponse, Error};
 use actix_web_actors::ws;
 use actix::prelude::*;
+use actix::Running;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use log;

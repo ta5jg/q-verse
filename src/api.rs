@@ -278,15 +278,15 @@ pub async fn stake(
     )
 )]
 pub async fn health_check(
-    metrics: web::Data<Metrics>
+    data: web::Data<AppState>
 ) -> impl Responder {
     let start = Instant::now();
-    metrics.increment_requests();
+    data.metrics.increment_requests();
     
-    let stats = metrics.get_stats();
+    let stats = data.metrics.get_stats();
     let response_time = start.elapsed().as_millis() as u64;
-    metrics.record_response_time(response_time);
-    metrics.increment_success();
+    data.metrics.record_response_time(response_time);
+    data.metrics.increment_success();
     
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "status": "online",
@@ -298,9 +298,9 @@ pub async fn health_check(
 }
 
 pub async fn get_metrics(
-    metrics: web::Data<Metrics>
+    data: web::Data<AppState>
 ) -> impl Responder {
-    HttpResponse::Ok().json(ApiResponse::success(metrics.get_stats()))
+    HttpResponse::Ok().json(ApiResponse::success(data.metrics.get_stats()))
 }
 
 pub async fn create_user(
@@ -315,7 +315,7 @@ pub async fn create_user(
     
     log::info!("Creating user: {}", req.username);
     
-    match db.create_user(&req.username).await {
+    match data.db.create_user(&req.username).await {
         Ok(user) => {
             let (wallet, sk) = Wallet::new(user.id);
             if let Err(e) = db.save_wallet(&wallet).await {
@@ -339,23 +339,22 @@ pub async fn create_user(
 }
 
 pub async fn get_balance(
-    _db: web::Data<Database>,
+    data: web::Data<AppState>,
     path: web::Path<(Uuid, String)>
 ) -> impl Responder {
     let (wallet_id, token_str) = path.into_inner();
-    match db.get_balance(wallet_id, &token_str).await {
+    match data.db.get_balance(wallet_id, &token_str).await {
         Ok(balance) => HttpResponse::Ok().json(ApiResponse::success(balance)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
     }
 }
 
 pub async fn transfer(
-    _db: web::Data<Database>,
-    metrics: web::Data<Metrics>,
+    data: web::Data<AppState>,
     req: web::Json<TransferRequest>
 ) -> impl Responder {
     let start = Instant::now();
-    metrics.increment_requests();
+    data.metrics.increment_requests();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.from_wallet_id) {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()));
@@ -416,7 +415,7 @@ pub async fn transfer(
         },
     };
 
-    match db.process_transfer(&tx).await {
+    match data.db.process_transfer(&tx).await {
         Ok(_) => {
             let response_time = start.elapsed().as_millis() as u64;
             metrics.record_response_time(response_time);
@@ -426,7 +425,7 @@ pub async fn transfer(
             HttpResponse::Ok().json(ApiResponse::success(tx))
         },
         Err(e) => {
-            metrics.increment_failure();
+            data.metrics.increment_failure();
             log::error!("Transfer failed: {}", e);
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
         },
@@ -596,7 +595,7 @@ pub async fn swap_tokens(
     metrics.increment_swaps();
     
     // Invalidate cache
-    cache.pools.remove("all_pools").await;
+        data.cache.pools.remove("all_pools").await;
     
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "amount_out": amount_out,
@@ -620,7 +619,7 @@ pub async fn get_liquidity_pools(
     let pools: Vec<LiquidityPool> = match sqlx::query_as(
         "SELECT * FROM liquidity_pools ORDER BY total_supply DESC"
     )
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await {
         Ok(p) => p,
         Err(_) => vec![], // Return empty if error
@@ -637,7 +636,7 @@ pub async fn get_liquidity_pools(
     })).collect();
     
     // Cache the result
-    cache.pools.set("all_pools".to_string(), serde_json::json!(pools_json.clone())).await;
+        data.cache.pools.set("all_pools".to_string(), serde_json::json!(pools_json.clone())).await;
     
     HttpResponse::Ok().json(ApiResponse::success(pools_json))
 }
@@ -715,7 +714,7 @@ pub async fn get_orderbook(
         "SELECT * FROM orders WHERE pair = ? AND side = 'BUY' AND status = 'PENDING' ORDER BY price DESC LIMIT 20"
     )
     .bind(&pair)
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await {
         Ok(orders) => orders,
         Err(e) => {
@@ -728,7 +727,7 @@ pub async fn get_orderbook(
         "SELECT * FROM orders WHERE pair = ? AND side = 'SELL' AND status = 'PENDING' ORDER BY price ASC LIMIT 20"
     )
     .bind(&pair)
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await {
         Ok(orders) => orders,
         Err(e) => {
@@ -871,7 +870,7 @@ pub async fn get_price(
     match price {
         Some(p) => {
             // Cache the price
-            cache.prices.set(token_symbol.clone(), p).await;
+            data.cache.prices.set(token_symbol.clone(), p).await;
             
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "token": token_symbol,
@@ -1086,7 +1085,7 @@ pub async fn get_proposals(
     match sqlx::query_as::<_, crate::models::Proposal>(
         "SELECT * FROM proposals ORDER BY created_at DESC LIMIT 50"
     )
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await {
         Ok(proposals) => {
             log::debug!("Fetched {} proposals", proposals.len());
@@ -1132,7 +1131,7 @@ pub async fn get_yield_pools(
     match sqlx::query_as::<_, crate::models::YieldPool>(
         "SELECT * FROM yield_pools WHERE is_active = TRUE"
     )
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await {
         Ok(pools) => {
             log::debug!("Fetched {} yield pools", pools.len());
@@ -1560,7 +1559,7 @@ pub async fn send_notification(
         "SELECT id, wallet_id, device_token, platform, app_version FROM mobile_devices WHERE wallet_id = ?"
     )
     .bind(req.wallet_id.to_string())
-    .fetch_all(&db.pool)
+    .fetch_all(&data.db.pool)
     .await
     .unwrap_or_default();
     
@@ -1714,7 +1713,7 @@ pub async fn batch_transfer(
             })))
         },
         Err(e) => {
-            metrics.increment_failure();
+            data.metrics.increment_failure();
             log::error!("Batch transfer failed: {}", e);
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
         },
@@ -1761,7 +1760,7 @@ pub async fn batch_swap(
             })))
         },
         Err(e) => {
-            metrics.increment_failure();
+            data.metrics.increment_failure();
             log::error!("Batch swap failed: {}", e);
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string()))
         },
