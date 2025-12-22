@@ -259,8 +259,7 @@ pub async fn analyze_tx(
     HttpResponse::Ok().json(ApiResponse::success(analysis))
 }
 
-pub async fn stake(
-    _db: web::Data<Database>,
+pub async fn stake(data: web::Data<AppState>,
     req: web::Json<StakeRequest>
 ) -> impl Responder {
     match db.stake_tokens(req.wallet_id, req.amount).await {
@@ -303,8 +302,7 @@ pub async fn get_metrics(
     HttpResponse::Ok().json(ApiResponse::success(data.metrics.get_stats()))
 }
 
-pub async fn create_user(
-    _db: web::Data<Database>,
+pub async fn create_user(data: web::Data<AppState>,
     req: web::Json<CreateUserRequest>
 ) -> impl Responder {
     // Validate input
@@ -432,8 +430,7 @@ pub async fn transfer(
     }
 }
 
-pub async fn get_stake_info(
-    _db: web::Data<Database>,
+pub async fn get_stake_info(data: web::Data<AppState>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
@@ -446,8 +443,7 @@ pub async fn get_stake_info(
     }
 }
 
-pub async fn get_transactions(
-    _db: web::Data<Database>,
+pub async fn get_transactions(data: web::Data<AppState>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
@@ -511,8 +507,7 @@ pub async fn verify_iso20022(
 
 // --- EXCHANGE HANDLERS ---
 
-pub async fn swap_tokens(
-    _db: web::Data<Database>,
+pub async fn swap_tokens(data: web::Data<AppState>,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -605,9 +600,7 @@ pub async fn swap_tokens(
     })))
 }
 
-pub async fn get_liquidity_pools(
-    _db: web::Data<Database>,
-    cache: web::Data<CacheManager>
+pub async fn get_liquidity_pools(data: web::Data<AppState>
 ) -> impl Responder {
     // Check cache
     if let Some(cached) = cache.pools.get("all_pools").await {
@@ -641,8 +634,7 @@ pub async fn get_liquidity_pools(
     HttpResponse::Ok().json(ApiResponse::success(pools_json))
 }
 
-pub async fn create_order(
-    _db: web::Data<Database>,
+pub async fn create_order(data: web::Data<AppState>,
     req: web::Json<CreateOrderRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -697,8 +689,7 @@ pub async fn create_order(
     }
 }
 
-pub async fn get_orderbook(
-    _db: web::Data<Database>,
+pub async fn get_orderbook(data: web::Data<AppState>,
     path: web::Path<String>
 ) -> impl Responder {
     let pair = path.into_inner();
@@ -744,8 +735,7 @@ pub async fn get_orderbook(
 
 // --- BRIDGE HANDLERS ---
 
-pub async fn bridge_assets(
-    _db: web::Data<Database>,
+pub async fn bridge_assets(data: web::Data<AppState>,
     req: web::Json<BridgeRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -802,8 +792,7 @@ pub async fn bridge_assets(
 
 // --- EXPLORER HANDLERS ---
 
-pub async fn get_block(
-    _db: web::Data<Database>,
+pub async fn get_block(data: web::Data<AppState>,
     path: web::Path<i64>
 ) -> impl Responder {
     let block_number = path.into_inner();
@@ -824,8 +813,7 @@ pub async fn get_block(
     }
 }
 
-pub async fn search_explorer(
-    _db: web::Data<Database>,
+pub async fn search_explorer(data: web::Data<AppState>,
     query: web::Query<std::collections::HashMap<String, String>>
 ) -> impl Responder {
     let search_term = query.get("q").unwrap_or(&"".to_string()).clone();
@@ -839,9 +827,7 @@ pub async fn search_explorer(
 
 // --- ORACLE HANDLERS ---
 
-pub async fn get_price(
-    _db: web::Data<Database>,
-    cache: web::Data<CacheManager>,
+pub async fn get_price(data: web::Data<AppState>,
     path: web::Path<String>
 ) -> impl Responder {
     let token_symbol = path.into_inner();
@@ -883,8 +869,7 @@ pub async fn get_price(
     }
 }
 
-pub async fn update_price(
-    _db: web::Data<Database>,
+pub async fn update_price(data: web::Data<AppState>,
     req: web::Json<UpdatePriceRequest>
 ) -> impl Responder {
     let feed_id = Uuid::new_v4().to_string();
@@ -922,8 +907,7 @@ pub async fn update_price(
 
 // --- GOVERNANCE HANDLERS ---
 
-pub async fn create_proposal(
-    _db: web::Data<Database>,
+pub async fn create_proposal(data: web::Data<AppState>,
     req: web::Json<CreateProposalRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -967,8 +951,7 @@ pub async fn create_proposal(
     }
 }
 
-pub async fn vote_proposal(
-    _db: web::Data<Database>,
+pub async fn vote_proposal(data: web::Data<AppState>,
     req: web::Json<VoteRequest>
 ) -> impl Responder {
     // Validate inputs
@@ -1079,8 +1062,7 @@ pub async fn vote_proposal(
     }
 }
 
-pub async fn get_proposals(
-    db: web::Data<Database>
+pub async fn get_proposals(data: web::Data<AppState>
 ) -> impl Responder {
     match sqlx::query_as::<_, crate::models::Proposal>(
         "SELECT * FROM proposals ORDER BY created_at DESC LIMIT 50"
@@ -1100,8 +1082,7 @@ pub async fn get_proposals(
 
 // --- YIELD FARMING HANDLERS ---
 
-pub async fn stake_yield(
-    _db: web::Data<Database>,
+pub async fn stake_yield(data: web::Data<AppState>,
     req: web::Json<StakeYieldRequest>
 ) -> impl Responder {
     let position_id = Uuid::new_v4().to_string();
@@ -1125,8 +1106,7 @@ pub async fn stake_yield(
     })))
 }
 
-pub async fn get_yield_pools(
-    db: web::Data<Database>
+pub async fn get_yield_pools(data: web::Data<AppState>
 ) -> impl Responder {
     match sqlx::query_as::<_, crate::models::YieldPool>(
         "SELECT * FROM yield_pools WHERE is_active = TRUE"
@@ -1146,8 +1126,7 @@ pub async fn get_yield_pools(
 
 // --- AIRDROP HANDLERS ---
 
-pub async fn claim_airdrop(
-    _db: web::Data<Database>,
+pub async fn claim_airdrop(data: web::Data<AppState>,
     req: web::Json<ClaimAirdropRequest>
 ) -> impl Responder {
     // Check if already claimed
@@ -1203,8 +1182,7 @@ pub async fn claim_airdrop(
 
 // --- WALLET ENHANCEMENT HANDLERS ---
 
-pub async fn create_multisig(
-    _db: web::Data<Database>,
+pub async fn create_multisig(data: web::Data<AppState>,
     req: web::Json<CreateMultiSigRequest>
 ) -> impl Responder {
     let signers: Vec<String> = req.signer_wallet_ids.iter().map(|id| id.to_string()).collect();
@@ -1255,8 +1233,7 @@ pub async fn create_multisig(
     HttpResponse::Ok().json(ApiResponse::success(multisig))
 }
 
-pub async fn sign_multisig(
-    _db: web::Data<Database>,
+pub async fn sign_multisig(data: web::Data<AppState>,
     req: web::Json<SignMultiSigRequest>
 ) -> impl Responder {
     let signature_id = Uuid::new_v4().to_string();
@@ -1321,8 +1298,7 @@ pub async fn sign_multisig(
     })))
 }
 
-pub async fn create_payment_request(
-    _db: web::Data<Database>,
+pub async fn create_payment_request(data: web::Data<AppState>,
     req: web::Json<CreatePaymentRequest>
 ) -> impl Responder {
     let payment = PaymentGateway::create_payment_request(
@@ -1377,8 +1353,7 @@ pub async fn scan_qr_code(
 
 // --- DEVELOPER TOOLS HANDLERS ---
 
-pub async fn compile_contract(
-    _db: web::Data<Database>,
+pub async fn compile_contract(data: web::Data<AppState>,
     req: web::Json<CompileContractRequest>
 ) -> impl Responder {
     // Validate source
@@ -1410,8 +1385,7 @@ pub async fn compile_contract(
     HttpResponse::Ok().json(ApiResponse::success(compiled))
 }
 
-pub async fn verify_contract(
-    _db: web::Data<Database>,
+pub async fn verify_contract(data: web::Data<AppState>,
     req: web::Json<VerifyContractRequest>
 ) -> impl Responder {
     // Get compiled contract
@@ -1435,8 +1409,7 @@ pub async fn verify_contract(
     }
 }
 
-pub async fn deploy_contract(
-    _db: web::Data<Database>,
+pub async fn deploy_contract(data: web::Data<AppState>,
     req: web::Json<DeployContractRequest>
 ) -> impl Responder {
     // Get compiled contract
@@ -1484,8 +1457,7 @@ pub async fn deploy_contract(
     }
 }
 
-pub async fn generate_sdk(
-    _db: web::Data<Database>,
+pub async fn generate_sdk(data: web::Data<AppState>,
     req: web::Json<GenerateSDKRequest>
 ) -> impl Responder {
     // Get deployed contract
@@ -1517,8 +1489,7 @@ pub async fn generate_sdk(
 
 // --- MOBILE INTEGRATION HANDLERS ---
 
-pub async fn register_device(
-    _db: web::Data<Database>,
+pub async fn register_device(data: web::Data<AppState>,
     req: web::Json<RegisterDeviceRequest>
 ) -> impl Responder {
     // Validate device token
@@ -1550,8 +1521,7 @@ pub async fn register_device(
     HttpResponse::Ok().json(ApiResponse::success(device))
 }
 
-pub async fn send_notification(
-    _db: web::Data<Database>,
+pub async fn send_notification(data: web::Data<AppState>,
     req: web::Json<SendNotificationRequest>
 ) -> impl Responder {
     // Get all devices for wallet
@@ -1599,8 +1569,7 @@ pub async fn send_notification(
     })))
 }
 
-pub async fn enable_biometric(
-    _db: web::Data<Database>,
+pub async fn enable_biometric(data: web::Data<AppState>,
     req: web::Json<EnableBiometricRequest>
 ) -> impl Responder {
     let biometric = BiometricAuthManager::enable_biometric(
@@ -1625,8 +1594,7 @@ pub async fn enable_biometric(
     HttpResponse::Ok().json(ApiResponse::success(biometric))
 }
 
-pub async fn verify_biometric(
-    _db: web::Data<Database>,
+pub async fn verify_biometric(data: web::Data<AppState>,
     req: web::Json<VerifyBiometricRequest>
 ) -> impl Responder {
     // Get biometric auth
@@ -1657,9 +1625,7 @@ pub async fn verify_biometric(
 
 // --- BATCH OPERATIONS HANDLERS ---
 
-pub async fn batch_transfer(
-    _db: web::Data<Database>,
-    metrics: web::Data<Metrics>,
+pub async fn batch_transfer(data: web::Data<AppState>,
     req: web::Json<BatchTransferRequest>
 ) -> impl Responder {
     let start = Instant::now();
@@ -1720,8 +1686,7 @@ pub async fn batch_transfer(
     }
 }
 
-pub async fn batch_swap(
-    metrics: web::Data<Metrics>,
+pub async fn batch_swap(data: web::Data<AppState>,
     req: web::Json<BatchSwapRequest>
 ) -> impl Responder {
     let start = Instant::now();
