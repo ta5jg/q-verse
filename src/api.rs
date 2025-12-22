@@ -895,8 +895,8 @@ pub async fn update_price_feed(data: web::Data<AppState>,
     .bind(&req.source)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     // Update aggregated price (simplified - in production, calculate average)
     sqlx::query(
@@ -912,8 +912,8 @@ pub async fn update_price_feed(data: web::Data<AppState>,
     .bind(req.price)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success("Price updated"))
 }
@@ -1111,8 +1111,8 @@ pub async fn stake_yield(data: web::Data<AppState>,
     .bind(req.amount)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
         "position_id": position_id,
@@ -1183,8 +1183,8 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
             .bind(req.merkle_proof.as_ref())
             .execute(&data.db.pool)
             .await
-            .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
             
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "claim_id": claim_id,
@@ -1218,8 +1218,8 @@ pub async fn create_multisig_wallet(data: web::Data<AppState>,
     .bind(multisig.total_signers)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     // Save signers
     for wallet_id in &req.signer_wallet_ids {
@@ -1265,8 +1265,8 @@ pub async fn sign_multisig_transaction(data: web::Data<AppState>,
     .bind(&req.signature)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     // Update signature count
     let count: i32 = sqlx::query_scalar(
@@ -1347,8 +1347,8 @@ pub async fn create_payment_request(data: web::Data<AppState>,
     .bind(payment.expires_at)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success(payment))
 }
@@ -1398,8 +1398,8 @@ pub async fn compile_contract(data: web::Data<AppState>,
     .bind(compiled.gas_estimate)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success(compiled))
 }
@@ -1459,8 +1459,8 @@ pub async fn deploy_contract(data: web::Data<AppState>,
             .bind(&address)
             .execute(&data.db.pool)
             .await
-            .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
             
             let deployed = DeployedContract {
                 id: deploy_id,
@@ -1536,8 +1536,8 @@ pub async fn register_device(data: web::Data<AppState>,
     .bind(device.app_version.as_ref())
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success(device))
 }
@@ -1610,8 +1610,8 @@ pub async fn enable_biometric(data: web::Data<AppState>,
     .bind(&biometric.public_key)
     .execute(&data.db.pool)
     .await
-    .await
-    ; if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
+    ;
+    if let Err(e) = result { return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())); }
     
     HttpResponse::Ok().json(ApiResponse::success(biometric))
 }
