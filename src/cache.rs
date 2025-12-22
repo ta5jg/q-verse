@@ -11,6 +11,7 @@ struct CacheEntry<T> {
 }
 
 /// In-memory cache with TTL support
+#[derive(Clone)]
 pub struct Cache<T> {
     entries: Arc<RwLock<HashMap<String, CacheEntry<T>>>>,
     default_ttl: Duration,
@@ -67,6 +68,7 @@ impl<T: Clone> Cache<T> {
 }
 
 /// Cache manager for different data types
+#[derive(Clone)]
 pub struct CacheManager {
     pub prices: Cache<f64>,
     pub pools: Cache<serde_json::Value>,

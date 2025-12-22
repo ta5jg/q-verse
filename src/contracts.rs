@@ -63,9 +63,13 @@ impl SmartContract for StakingContract {
         // In a real implementation, this would mutate state based on tx data
         // For now, we simulate success
         if tx.token_symbol == "QVR" {
+            // Amount is hidden in commitment, so we use a placeholder or decode it if public
+            let amount_placeholder = "HIDDEN_AMOUNT"; 
+            let sender_placeholder = "ANONYMOUS";
+            
             Ok(ExecutionResult {
                 success: true,
-                logs: vec![format!("Staked {} QVR from {}", tx.amount, tx.from_wallet_id)],
+                logs: vec![format!("Staked {} QVR from {}", amount_placeholder, sender_placeholder)],
                 gas_used: 0.002,
             })
         } else {

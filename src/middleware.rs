@@ -55,7 +55,7 @@ pub struct RequestIdMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for RequestIdMiddleware
 where
-    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -78,7 +78,7 @@ pub struct RequestIdMiddlewareService<S> {
 
 impl<S, B> Service<ServiceRequest> for RequestIdMiddlewareService<S>
 where
-    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -100,7 +100,12 @@ where
         
         let service = self.service.clone();
         Box::pin(async move {
-            let fut = service.borrow_mut().call(req);
+            let fut = {
+                let mut service_ref = service.borrow_mut();
+                let fut = service_ref.call(req);
+                drop(service_ref);
+                fut
+            };
             fut.await
         })
     }
@@ -111,7 +116,7 @@ pub struct SecurityHeadersMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for SecurityHeadersMiddleware
 where
-    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -134,7 +139,7 @@ pub struct SecurityHeadersService<S> {
 
 impl<S, B> Service<ServiceRequest> for SecurityHeadersService<S>
 where
-    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error>,
+    S: Service<ServiceRequest, Response = actix_web::dev::ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -151,7 +156,13 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         Box::pin(async move {
-            let mut res = service.borrow_mut().call(req).await?;
+            let fut = {
+                let mut service_ref = service.borrow_mut();
+                let fut = service_ref.call(req);
+                drop(service_ref);
+                fut
+            };
+            let mut res = fut.await?;
             
             // Add security headers
             use actix_web::http::header::{HeaderName, HeaderValue};

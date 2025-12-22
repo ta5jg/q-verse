@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/lib.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Verse Core Library Definition
+ *   
+ *   Module exports, shared state definitions, and
+ *   core library logic.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 pub mod api;
 pub mod contracts;
 pub mod crypto;
@@ -24,12 +42,14 @@ pub mod openapi;
 
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use crate::vm::QVM;
-use crate::ai::QMind;
-use crate::cache::CacheManager;
-use crate::metrics::Metrics;
-use crate::middleware::RateLimiter;
-use crate::db::Database;
+
+// Re-export commonly used types for easier access
+pub use db::Database;
+pub use vm::QVM;
+pub use ai::QMind;
+pub use cache::CacheManager;
+pub use metrics::Metrics;
+pub use middleware::{RateLimiter, RequestIdMiddleware, SecurityHeadersMiddleware};
 
 // Shared State - moved from main.rs to lib.rs so api.rs can access it
 pub struct AppState {

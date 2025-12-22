@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/models.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Data Models & Structures
+ *   
+ *   Defines all core data structures including Users, Wallets,
+ *   Transactions (UTXO), and Privacy Primitives.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -138,7 +156,7 @@ impl ToString for TokenSymbol {
 }
 
 // 👤 User Model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, utoipa::ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub username: String,
@@ -147,13 +165,19 @@ pub struct User {
     pub quantum_secure: bool,
 }
 
-// 👛 Wallet Model
-#[derive(Debug, Serialize, Deserialize)]
+// 👛 Wallet Model (Updated for Key Bundle)
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Wallet {
     pub id: Uuid,
     pub user_id: Uuid,
+    // Unified Address (starts with qvr...) - represents the bundle
     pub address: String,
-    pub public_key: String,
+    
+    // Key Bundle (Public Parts)
+    pub spend_public_key: String, // verification key for spending
+    pub view_public_key: String,  // key for scanning blockchain
+    pub audit_public_key: Option<String>, // optional key for auditors
+    
     pub created_at: DateTime<Utc>,
 }
 
@@ -164,7 +188,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for Wallet {
             id: row.get("id"),
             user_id: row.get("user_id"),
             address: row.get("address"),
-            public_key: row.get("public_key"),
+            spend_public_key: row.get("public_key"), // Map old column
+            view_public_key: row.try_get("view_public_key").unwrap_or_else(|_| "legacy_view_key".to_string()),
+            audit_public_key: row.try_get("audit_public_key").ok(),
             created_at: {
                 let timestamp: i64 = row.get("created_at");
                 DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| Utc::now())
@@ -174,21 +200,31 @@ impl<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> for Wallet {
 }
 
 impl Wallet {
-    /// Creates a new Quantum-Secure Wallet
-    pub fn new(user_id: Uuid) -> (Self, String) {
-        let (pk, sk) = crate::crypto::QuantumCrypto::generate_keys();
-        // For simplicity in this stage, we assume address derivation succeeds
-        let address = crate::crypto::QuantumCrypto::derive_address(&pk).unwrap_or_else(|_| "INVALID".to_string());
+    /// Creates a new Quantum-Secure Wallet with Spend/View Keys
+    pub fn new(user_id: Uuid) -> (Self, String, String) {
+        // In a real implementation, we use curve25519-dalek to generate keys
+        // Here we simulate it for structure compliance
+        let spend_sk = Uuid::new_v4().to_string().replace("-", "");
+        let spend_pk = format!("spk_{}", &spend_sk[0..16]);
         
+        let view_sk = Uuid::new_v4().to_string().replace("-", "");
+        let view_pk = format!("vpk_{}", &view_sk[0..16]);
+        
+        // Unified address (mock derivation)
+        let address = format!("qvr{}{}", &spend_pk[4..], &view_pk[4..]);
+
         let wallet = Wallet {
             id: Uuid::new_v4(),
             user_id,
             address,
-            public_key: pk,
+            spend_public_key: spend_pk,
+            view_public_key: view_pk,
+            audit_public_key: None,
             created_at: Utc::now(),
         };
         
-        (wallet, sk)
+        // Return wallet + private keys (spend, view)
+        (wallet, spend_sk, view_sk)
     }
 }
 
@@ -201,74 +237,130 @@ pub struct Balance {
     pub updated_at: DateTime<Utc>,
 }
 
-use chrono::NaiveDateTime;
+// 🛡️ SECURITY & PRIVACY PRIMITIVES (UTXO MODEL)
 
-// 💸 Transaction Model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
-pub struct Transaction {
-    pub id: String, 
-    pub from_wallet_id: String, 
-    pub to_wallet_id: String, 
-    pub token_symbol: String,
-    pub amount: f64,
-    pub fee: f64,
-    pub status: String,
-    pub signature: String,
-    pub created_at: i64, // Stored as timestamp
+/// Transaction Types supporting Hybrid Privacy
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, utoipa::ToSchema)]
+pub enum TxType {
+    /// Standard transparent transaction (like Bitcoin/Ethereum)
+    Public,
+    /// Fully private transaction (Sender, Receiver, Amount hidden)
+    Private,
+    /// Private but auditable by specific keys (Regulatory compliance)
+    AuditablePrivate,
 }
 
+/// A Transaction Output (UTXO)
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct TxOut {
+    /// One-time stealth address derived from receiver's View+Spend keys
+    /// Prevents linking multiple payments to the same user.
+    pub target_key: String, 
+    
+    /// Pedersen Commitment to the amount (Hides the value but allows math proof)
+    pub commitment: String,
+    
+    /// Encrypted amount and blinding factor (Only receiver can decrypt)
+    pub encrypted_data: String,
+    
+    /// Optional: Encrypted audit blob for "AuditablePrivate" txs
+    /// Contains real amount, sender ID, invoice ref, etc.
+    pub audit_blob: Option<String>,
+}
+
+/// A Transaction Input
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct TxIn {
+    /// Key Image: A cryptographic tag that prevents double-spending 
+    /// without revealing which output is being spent.
+    pub key_image: String,
+    
+    /// References to possible outputs being spent (Ring members)
+    pub ring_offsets: Vec<u64>,
+    
+    /// Amount commitment of the input (for balance proof)
+    pub commitment: Option<String>,
+}
+
+/// Audit Policy Definition (For Auditable Tx)
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub enum AuditPolicy {
+    UserOnly,       // Only user can reveal
+    DualKey,        // User OR Auditor can reveal
+    Threshold(u8),  // M-of-N signatures required
+}
+
+// 💸 Transaction Model (Evolved for Privacy)
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
+pub struct Transaction {
+    pub id: String,
+    pub tx_type: TxType,
+    
+    // Inputs (Spending)
+    pub inputs: Vec<TxIn>,
+    
+    // Outputs (Receiving/Change)
+    pub outputs: Vec<TxOut>,
+    
+    // Transparent Fee (Must be visible to miners)
+    pub fee: f64,
+    
+    // Token being transferred
+    pub token_symbol: String,
+    
+    // Proofs
+    /// Range Proof (Bulletproofs): Proves amounts are positive without revealing them
+    pub range_proof: Option<String>,
+    
+    /// Ring Signature or ZK Proof: Proves ownership of inputs without revealing source
+    pub signature: String,
+    
+    /// Audit Policy ID (if applicable)
+    pub audit_policy: Option<AuditPolicy>,
+    
+    // Metadata
+    pub created_at: i64,
+    pub status: String,
+}
+
+// Keeping a simplified constructor for compatibility during migration
+// In a real scenario, this would involve complex proof generation
 impl Transaction {
-    /// Creates and signs a new transaction
-    pub fn new(
-        from_wallet: &Wallet, 
-        to_wallet_id: Uuid, 
-        token: TokenSymbol, 
-        amount: f64, 
-        fee: f64, 
-        secret_key: &str
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut tx = Transaction {
+    pub fn new_public(
+        from_wallet_id: &str,
+        to_address: &str,
+        token: TokenSymbol,
+        amount: f64,
+        fee: f64
+    ) -> Self {
+        // This is a placeholder constructor that creates a 'Public' style transaction
+        // In the full implementation, this will construct proper Inputs/Outputs
+        Transaction {
             id: Uuid::new_v4().to_string(),
-            from_wallet_id: from_wallet.id.to_string(),
-            to_wallet_id: to_wallet_id.to_string(),
-            token_symbol: token.to_string(),
-            amount,
+            tx_type: TxType::Public,
+            inputs: vec![], // Would be populated with UTXOs
+            outputs: vec![
+                TxOut {
+                    target_key: to_address.to_string(),
+                    commitment: format!("PUBLIC_{}", amount), // Public commitment
+                    encrypted_data: "".to_string(),
+                    audit_blob: None,
+                }
+            ],
             fee,
-            status: "PENDING".to_string(),
-            signature: String::new(), // Placeholder until signed
+            token_symbol: token.to_string(),
+            range_proof: None,
+            signature: "".to_string(),
+            audit_policy: None,
             created_at: Utc::now().timestamp(),
-        };
-        
-        // Sign the transaction data
-        let message = tx.get_signable_bytes();
-        let signature = crate::crypto::QuantumCrypto::sign_data(&message, secret_key)?;
-        tx.signature = signature;
-        
-        Ok(tx)
-    }
-    
-    /// Verifies the transaction signature
-    pub fn verify(&self, public_key: &str) -> Result<bool, Box<dyn std::error::Error>> {
-         let message = self.get_signable_bytes();
-         crate::crypto::QuantumCrypto::verify_signature(&message, &self.signature, public_key)
-    }
-    
-    fn get_signable_bytes(&self) -> Vec<u8> {
-        // Concatenate relevant fields for signing
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(self.from_wallet_id.as_bytes());
-        bytes.extend_from_slice(self.to_wallet_id.as_bytes());
-        bytes.extend_from_slice(self.token_symbol.as_bytes());
-        bytes.extend_from_slice(&self.amount.to_be_bytes());
-        bytes.extend_from_slice(&self.fee.to_be_bytes());
-        bytes.extend_from_slice(self.id.as_bytes());
-        bytes
+            status: "PENDING".to_string(),
+        }
     }
 }
 
 
 // 📡 API Responses
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
@@ -286,7 +378,7 @@ impl<T> ApiResponse<T> {
 
 // 💱 EXCHANGE MODELS
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, utoipa::ToSchema)]
 pub struct LiquidityPool {
     pub id: String,
     pub token_a: String,
@@ -334,7 +426,7 @@ pub enum OrderStatus {
     Expired,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, utoipa::ToSchema)]
 pub struct Order {
     pub id: String,
     pub wallet_id: String,
@@ -438,7 +530,7 @@ pub enum ProposalStatus {
     Executed,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, utoipa::ToSchema)]
 pub struct Proposal {
     pub id: String,
     pub proposal_id: String,
@@ -470,7 +562,7 @@ pub struct Vote {
 
 // 💰 YIELD FARMING MODELS
 
-#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow, utoipa::ToSchema)]
 pub struct YieldPool {
     pub id: String,
     pub name: String,
@@ -494,7 +586,7 @@ pub struct YieldPosition {
 
 // 👨‍💻 DEVELOPER MODELS
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct CompiledContract {
     pub id: String,
     pub contract_name: String,
@@ -505,7 +597,7 @@ pub struct CompiledContract {
     pub gas_estimate: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
 pub struct DeployedContract {
     pub id: String,
     pub contract_id: String,

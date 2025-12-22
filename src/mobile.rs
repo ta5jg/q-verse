@@ -98,7 +98,7 @@ impl PushNotificationService {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PushNotification {
     pub id: String,
     pub device_id: String,

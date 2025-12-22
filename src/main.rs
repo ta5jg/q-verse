@@ -1,39 +1,27 @@
-mod api;
-mod contracts;
-mod crypto;
-mod db;
-mod models;
-// mod network; // Temporarily disabled
-mod vm;
-mod compliance;
-mod ai;
-mod qrc20;
-mod exchange;
-mod wallet;
-mod developer;
-mod mobile;
-mod config;
-mod validation;
-mod errors;
-mod middleware;
-mod cache;
-mod metrics;
-mod batch;
-mod websocket;
-mod openapi;
+/* ==============================================
+ * File:        src/main.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Verse Core Main Entry
+ *   
+ *   Main application entry point, server initialization,
+ *   and dependency injection setup.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
 
 use actix_web::{web, App, HttpServer, middleware::Logger, middleware::Compress};
-use db::Database;
 use actix_cors::Cors;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-// use crate::network::P2PNode; // Temporarily disabled
-use crate::vm::QVM;
-use crate::ai::QMind;
-use crate::cache::CacheManager;
-use crate::metrics::Metrics;
-use crate::middleware::{RateLimiter, RequestIdMiddleware, SecurityHeadersMiddleware};
-use crate::AppState; // Import from lib.rs
+// use q_verse_core::network::P2PNode; // Temporarily disabled
+use q_verse_core::{Database, QVM, QMind, CacheManager, Metrics, RateLimiter, RequestIdMiddleware, SecurityHeadersMiddleware, AppState, config};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -133,8 +121,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(app_state.cache.clone()))
             .app_data(web::Data::new(app_state.metrics.clone()))
             .app_data(web::Data::new(app_state.rate_limiter.clone()))
-            .service(openapi::swagger_ui())
-            .configure(api::config)
+            .service(q_verse_core::openapi::swagger_ui())
+            .configure(q_verse_core::api::config)
     })
     .bind(&bind_addr)?
     .workers(num_cpus::get().min(8)) // Use up to 8 CPU cores for optimal performance

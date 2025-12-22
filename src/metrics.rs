@@ -56,10 +56,7 @@ impl Metrics {
     }
 
     pub fn get_stats(&self) -> MetricsStats {
-        let times = self.response_times.try_read().unwrap_or_else(|_| {
-            let empty: Vec<u64> = Vec::new();
-            std::sync::RwLock::new(empty).into_inner().unwrap()
-        });
+        let times = self.response_times.try_read().map(|guard| guard.clone()).unwrap_or_else(|_| Vec::new());
         let avg_response_time = if times.is_empty() {
             0.0
         } else {

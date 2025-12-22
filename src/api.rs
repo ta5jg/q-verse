@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/api.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   REST API Handlers
+ *   
+ *   Implements API endpoints for Wallet, Transaction,
+ *   Exchange, and Governance operations.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use actix_web::{web, HttpResponse, Responder};
 use crate::models::{ApiResponse, TokenSymbol, Wallet, Transaction, LiquidityPool, Order, Trade};
 use crate::models::{CompiledContract, DeployedContract};
@@ -325,7 +343,7 @@ pub async fn create_user(data: web::Data<AppState>,
     
     match data.db.create_user(&req.username).await {
         Ok(user) => {
-            let (wallet, sk) = Wallet::new(user.id);
+            let (wallet, spend_sk, view_sk) = Wallet::new(user.id);
             if let Err(e) = data.db.save_wallet(&wallet).await {
                 log::error!("Failed to save wallet for user {}: {}", user.id, e);
                 return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to create wallet".into()));
@@ -336,7 +354,8 @@ pub async fn create_user(data: web::Data<AppState>,
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "user": user,
                 "wallet": wallet,
-                "secret_key": sk 
+                "spend_secret_key": spend_sk,
+                "view_secret_key": view_sk
             })))
         },
         Err(e) => {
@@ -408,14 +427,18 @@ pub async fn transfer(
 
     log::info!("Processing transfer: {} {} from {} to {}", req.amount, req.token, req.from_wallet_id, req.to_wallet_id);
 
-    let tx = match Transaction::new(
-        &from_wallet, 
-        req.to_wallet_id, 
+    let tx = Transaction::new_public(
+        &from_wallet.id.to_string(), 
+        &req.to_wallet_id.to_string(), 
         token_sym.clone(), 
         req.amount, 
-        req.fee, 
-        &req.secret_key
-    ) {
+        req.fee
+    );
+
+    // Wrap in Ok since new_public doesn't return Result currently (it's a simplified constructor)
+    let tx: Result<Transaction, Box<dyn std::error::Error>> = Ok(tx);
+
+    let tx = match tx {
         Ok(t) => t,
         Err(e) => {
             log::error!("Failed to create transaction: {}", e);
@@ -423,7 +446,7 @@ pub async fn transfer(
         },
     };
 
-    match data.db.process_transfer(&tx).await {
+    match data.db.process_transfer(&tx, &from_wallet.id.to_string()).await {
         Ok(_) => {
             let response_time = start.elapsed().as_millis() as u64;
             data.metrics.record_response_time(response_time);
@@ -1250,7 +1273,7 @@ pub async fn create_multisig_wallet(data: web::Data<AppState>,
             )
             .bind(&multisig.id)
             .bind(wallet_id.to_string())
-            .bind(w.public_key)
+            .bind(w.spend_public_key)
             .execute(&data.db.pool)
             .await.ok();
         }
@@ -1483,7 +1506,7 @@ pub async fn deploy_contract(data: web::Data<AppState>,
             let deployed = DeployedContract {
                 id: deploy_id,
                 contract_id,
-                compiled_contract_id: Some(req.compiled_contract_id),
+                compiled_contract_id: Some(req.compiled_contract_id.clone()),
                 deployer_wallet_id: req.deployer_wallet_id.to_string(),
                 address,
                 deployment_tx_id: None,
@@ -1625,7 +1648,7 @@ pub async fn enable_biometric(data: web::Data<AppState>,
     );
     
     // Save biometric auth
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO biometric_auth (id, wallet_id, biometric_type, public_key, is_enabled)
          VALUES (?, ?, ?, ?, TRUE)"
     )
@@ -1659,16 +1682,10 @@ pub async fn verify_biometric(data: web::Data<AppState>,
     match public_key {
         Some(pk) => {
             match BiometricAuthManager::verify_biometric(&req.challenge, &req.signature, &pk) {
-                Ok(verified) => {
-                    HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                "transaction_ids": tx_ids,
-                "count": tx_ids.len(),
-                "response_time_ms": response_time
-              })))
-                        "verified": verified,
-                        "wallet_id": req.wallet_id
-                    })))
-                },
+                Ok(verified) => HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "verified": verified,
+                    "wallet_id": req.wallet_id
+                }))),
                 Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
             }
         },

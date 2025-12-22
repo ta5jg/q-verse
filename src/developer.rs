@@ -76,7 +76,7 @@ impl FormalVerifier {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PropertyResult {
     pub property: String,
     pub verified: bool,

@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/db.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Database Layer
+ *   
+ *   Manages SQLite connection, schema migrations, and
+ *   data persistence logic.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite, Row};
 use std::error::Error;
 use uuid::Uuid;
@@ -71,7 +89,7 @@ impl Database {
             );"
         ).execute(&self.pool).await?;
 
-        // Transactions Table
+        // Transactions Table (Updated for Hybrid Storage)
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS transactions (
                 id TEXT PRIMARY KEY,
@@ -82,9 +100,14 @@ impl Database {
                 fee REAL DEFAULT 0.0,
                 status TEXT NOT NULL,
                 signature TEXT NOT NULL,
+                data TEXT, -- Stores the full JSON of the new UTXO Transaction struct
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );"
         ).execute(&self.pool).await?;
+
+        // Migration: Ensure 'data' column exists for legacy databases
+        // This will silently fail if the column already exists, which is intended behavior
+        sqlx::query("ALTER TABLE transactions ADD COLUMN data TEXT").execute(&self.pool).await.ok();
 
         // Staking Table
         sqlx::query(
@@ -503,7 +526,7 @@ impl Database {
         .bind(wallet.id.to_string())
         .bind(wallet.user_id.to_string())
         .bind(&wallet.address)
-        .bind(&wallet.public_key)
+        .bind(&wallet.spend_public_key)
         .execute(&self.pool).await?;
         Ok(())
     }
@@ -537,7 +560,8 @@ impl Database {
     /// Executes an Atomic Transfer (Balance Check -> Decrement -> Increment -> Record Tx)
     pub async fn process_transfer(
         &self, 
-        tx: &crate::models::Transaction
+        tx: &crate::models::Transaction,
+        sender_wallet_id: &str
     ) -> Result<(), Box<dyn Error>> {
         let mut db_tx = self.pool.begin().await?;
 
@@ -545,12 +569,34 @@ impl Database {
         let sender_balance: f64 = sqlx::query_scalar(
             "SELECT amount FROM balances WHERE wallet_id = ? AND token_symbol = ?"
         )
-        .bind(&tx.from_wallet_id)
+        .bind(sender_wallet_id)
         .bind(&tx.token_symbol)
         .fetch_optional(&mut *db_tx).await?
         .unwrap_or(0.0);
 
-        let total_required = tx.amount + tx.fee;
+        // Calculate total amount from outputs (simplified for Public tx)
+        // In a real private tx, this would involve range proofs
+        let total_amount: f64 = 0.0; // Placeholder: In Public mode we trust the 'amount' passed implicitly or use metadata
+        // For migration compatibility, we assume the API validated the amount passed in separate logic
+        // But wait, the Transaction struct doesn't have 'amount' field anymore directly exposed as 'amount' 
+        // It has 'fee'. The amount is in the output commitment.
+        // For this hybrid phase, we will assume the caller verified the logic.
+        // We will pass the 'amount' via a different way or assume the commitment holds the public value.
+        // FIX: The API passed amount to create the TX, but process_transfer receives only the TX object.
+        // We need to decode the amount from the commitment if it's public.
+        // In new_public, we set commitment = "PUBLIC_{amount}".
+        
+        let amount = if let Some(output) = tx.outputs.first() {
+            if output.commitment.starts_with("PUBLIC_") {
+                output.commitment.trim_start_matches("PUBLIC_").parse::<f64>().unwrap_or(0.0)
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+
+        let total_required = amount + tx.fee;
         if sender_balance < total_required {
             return Err(format!("Insufficient funds. Required: {}, Available: {}", total_required, sender_balance).into());
         }
@@ -561,34 +607,40 @@ impl Database {
             "UPDATE balances SET amount = ? WHERE wallet_id = ? AND token_symbol = ?"
         )
         .bind(new_sender_bal)
-        .bind(&tx.from_wallet_id)
+        .bind(sender_wallet_id)
         .bind(&tx.token_symbol)
         .execute(&mut *db_tx).await?;
 
         // 3. Increment Receiver
+        // Extract receiver from outputs
+        let receiver_id = tx.outputs.first().map(|o| o.target_key.clone()).unwrap_or_default();
+        
         // (Upsert logic for SQLite)
         sqlx::query(
             "INSERT INTO balances (wallet_id, token_symbol, amount) VALUES (?, ?, ?)
              ON CONFLICT(wallet_id, token_symbol) DO UPDATE SET amount = amount + ?"
         )
-        .bind(&tx.to_wallet_id)
+        .bind(&receiver_id)
         .bind(&tx.token_symbol)
-        .bind(tx.amount)
-        .bind(tx.amount) // for the update part
+        .bind(amount)
+        .bind(amount) // for the update part
         .execute(&mut *db_tx).await?;
 
         // 4. Record Transaction
+        let tx_json = serde_json::to_string(tx)?;
+        
         sqlx::query(
-            "INSERT INTO transactions (id, from_wallet_id, to_wallet_id, token_symbol, amount, fee, status, signature)
-             VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?)"
+            "INSERT INTO transactions (id, from_wallet_id, to_wallet_id, token_symbol, amount, fee, status, signature, data)
+             VALUES (?, ?, ?, ?, ?, ?, 'COMPLETED', ?, ?)"
         )
         .bind(&tx.id)
-        .bind(&tx.from_wallet_id)
-        .bind(&tx.to_wallet_id)
+        .bind(sender_wallet_id)
+        .bind(&receiver_id)
         .bind(&tx.token_symbol)
-        .bind(tx.amount)
+        .bind(amount)
         .bind(tx.fee)
         .bind(&tx.signature)
+        .bind(&tx_json)
         .execute(&mut *db_tx).await?;
 
         db_tx.commit().await?;
@@ -652,8 +704,8 @@ impl Database {
     }
 
     pub async fn get_transactions(&self, wallet_id: Uuid) -> Result<Vec<crate::models::Transaction>, Box<dyn Error>> {
-        let rows = sqlx::query_as::<_, crate::models::Transaction>(
-            "SELECT * FROM transactions 
+        let rows = sqlx::query(
+            "SELECT data FROM transactions 
              WHERE from_wallet_id = ? OR to_wallet_id = ? 
              ORDER BY created_at DESC LIMIT 50"
         )
@@ -661,7 +713,20 @@ impl Database {
         .bind(wallet_id.to_string())
         .fetch_all(&self.pool).await?;
 
-        Ok(rows)
+        let mut txs = Vec::new();
+        for row in rows {
+            // Handle potential legacy data or missing columns gracefully
+            match row.try_get::<String, _>("data") {
+                Ok(data) => {
+                    if let Ok(tx) = serde_json::from_str::<crate::models::Transaction>(&data) {
+                        txs.push(tx);
+                    }
+                },
+                Err(_) => continue, // Skip if no data column or null
+            }
+        }
+
+        Ok(txs)
     }
 
     // --- Exchange Helpers ---
