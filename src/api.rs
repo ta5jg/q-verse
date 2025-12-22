@@ -262,7 +262,7 @@ pub async fn analyze_tx(
 pub async fn stake(data: web::Data<AppState>,
     req: web::Json<StakeRequest>
 ) -> impl Responder {
-    match db.stake_tokens(req.wallet_id, req.amount).await {
+    match data.db.stake_tokens(req.wallet_id, req.amount).await {
         Ok(_) => HttpResponse::Ok().json(ApiResponse::success("Staking Successful! 🚀")),
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
     }
@@ -316,7 +316,7 @@ pub async fn create_user(data: web::Data<AppState>,
     match data.db.create_user(&req.username).await {
         Ok(user) => {
             let (wallet, sk) = Wallet::new(user.id);
-            if let Err(e) = db.save_wallet(&wallet).await {
+            if let Err(e) = data.db.save_wallet(&wallet).await {
                 log::error!("Failed to save wallet for user {}: {}", user.id, e);
                 return HttpResponse::InternalServerError().json(ApiResponse::<()>::error("Failed to create wallet".into()));
             }
@@ -383,7 +383,7 @@ pub async fn transfer(
         "SELECT * FROM wallets WHERE id = ?"
     )
     .bind(req.from_wallet_id.to_string())
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -416,9 +416,9 @@ pub async fn transfer(
     match data.db.process_transfer(&tx).await {
         Ok(_) => {
             let response_time = start.elapsed().as_millis() as u64;
-            metrics.record_response_time(response_time);
-            metrics.increment_success();
-            metrics.increment_transactions();
+            data.metrics.record_response_time(response_time);
+            data.metrics.increment_success();
+            data.metrics.increment_transactions();
             log::info!("Transfer completed: {} ({}ms)", tx.id, response_time);
             HttpResponse::Ok().json(ApiResponse::success(tx))
         },
@@ -434,7 +434,7 @@ pub async fn get_stake_info(data: web::Data<AppState>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
-    match db.get_stake(wallet_id).await {
+    match data.db.get_stake(wallet_id).await {
         Ok(amount) => HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
             "staked_amount": amount,
             "rewards": amount * 0.05 
@@ -447,7 +447,7 @@ pub async fn get_transactions(data: web::Data<AppState>,
     path: web::Path<Uuid>
 ) -> impl Responder {
     let wallet_id = path.into_inner();
-    match db.get_transactions(wallet_id).await {
+    match data.db.get_transactions(wallet_id).await {
         Ok(txs) => HttpResponse::Ok().json(ApiResponse::success(txs)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
     }
@@ -534,7 +534,7 @@ pub async fn swap_tokens(data: web::Data<AppState>,
     .bind(&req.token_out)
     .bind(&req.token_out)
     .bind(&req.token_in)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -585,9 +585,9 @@ pub async fn swap_tokens(data: web::Data<AppState>,
         req.amount_in, req.token_in, amount_out, req.token_out, price_impact);
     
     let response_time = start.elapsed().as_millis() as u64;
-    metrics.record_response_time(response_time);
-    metrics.increment_success();
-    metrics.increment_swaps();
+    data.metrics.record_response_time(response_time);
+    data.metrics.increment_success();
+    data.metrics.increment_swaps();
     
     // Invalidate cache
         data.cache.pools.remove("all_pools").await;
@@ -603,7 +603,7 @@ pub async fn swap_tokens(data: web::Data<AppState>,
 pub async fn get_liquidity_pools(data: web::Data<AppState>
 ) -> impl Responder {
     // Check cache
-    if let Some(cached) = cache.pools.get("all_pools").await {
+    if let Some(cached) = data.cache.pools.get("all_pools").await {
         log::debug!("Pools cache hit");
         return HttpResponse::Ok().json(ApiResponse::success(cached));
     }
@@ -673,7 +673,7 @@ pub async fn create_order(data: web::Data<AppState>,
     .bind(&req.order_type.to_uppercase())
     .bind(req.price)
     .bind(req.amount)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await {
         Ok(_) => {
             log::info!("Order created: {}", order_id);
@@ -773,7 +773,7 @@ pub async fn bridge_assets(data: web::Data<AppState>,
     .bind(req.wallet_id.to_string())
     .bind(&req.token_symbol)
     .bind(req.amount)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await {
         Ok(_) => {
             log::info!("Bridge transaction created: {}", bridge_id);
@@ -802,7 +802,7 @@ pub async fn get_block(data: web::Data<AppState>,
         "SELECT * FROM blocks WHERE block_number = ?"
     )
     .bind(block_number)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -833,7 +833,7 @@ pub async fn get_price(data: web::Data<AppState>,
     let token_symbol = path.into_inner();
     
     // Check cache first
-    if let Some(cached_price) = cache.prices.get(&token_symbol).await {
+    if let Some(cached_price) = data.cache.prices.get(&token_symbol).await {
         log::debug!("Price cache hit for {}", token_symbol);
         return HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
             "token": token_symbol,
@@ -848,7 +848,7 @@ pub async fn get_price(data: web::Data<AppState>,
         "SELECT price FROM aggregated_prices WHERE token_symbol = ?"
     )
     .bind(&token_symbol)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -882,7 +882,7 @@ pub async fn update_price(data: web::Data<AppState>,
     .bind(&req.token_symbol)
     .bind(req.price)
     .bind(&req.source)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -898,7 +898,7 @@ pub async fn update_price(data: web::Data<AppState>,
     .bind(&req.token_symbol)
     .bind(req.price)
     .bind(req.price)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -935,7 +935,7 @@ pub async fn create_proposal(data: web::Data<AppState>,
     .bind(&req.title)
     .bind(&req.description)
     .bind(req.proposer_wallet_id.to_string())
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await {
         Ok(_) => {
             log::info!("Proposal created: {}", proposal_id);
@@ -966,7 +966,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
     }
     
     // Check if proposal exists
-    let proposal = match db.get_proposal(&req.proposal_id).await {
+    let proposal = match data.db.get_proposal(&req.proposal_id).await {
         Ok(Some(p)) => p,
         Ok(None) => {
             log::warn!("Proposal not found: {}", req.proposal_id);
@@ -988,7 +988,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
     )
     .bind(&req.proposal_id)
     .bind(req.wallet_id.to_string())
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -998,7 +998,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
     }
     
     // Get wallet's QVR balance for quadratic voting
-    let balance = match db.get_balance(req.wallet_id, "QVR").await {
+    let balance = match data.db.get_balance(req.wallet_id, "QVR").await {
         Ok(b) => b,
         Err(e) => {
             log::error!("Failed to get balance: {}", e);
@@ -1027,7 +1027,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
     .bind(req.wallet_id.to_string())
     .bind(&vote_type_upper)
     .bind(voting_power)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await {
         Ok(_) => {
             // Update proposal vote counts
@@ -1037,7 +1037,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
                 )
                 .bind(voting_power)
                 .bind(&req.proposal_id)
-                .execute(&db.pool)
+                .execute(&data.db.pool)
                 .await.ok();
             } else if vote_type_upper == "AGAINST" {
                 sqlx::query(
@@ -1045,7 +1045,7 @@ pub async fn vote_proposal(data: web::Data<AppState>,
                 )
                 .bind(voting_power)
                 .bind(&req.proposal_id)
-                .execute(&db.pool)
+                .execute(&data.db.pool)
                 .await.ok();
             }
             
@@ -1096,7 +1096,7 @@ pub async fn stake_yield(data: web::Data<AppState>,
     .bind(&req.pool_id)
     .bind(req.wallet_id.to_string())
     .bind(req.amount)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1135,7 +1135,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
     )
     .bind(&req.campaign_id)
     .bind(req.wallet_id.to_string())
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1149,7 +1149,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
         "SELECT * FROM airdrop_campaigns WHERE id = ? AND status = 'ACTIVE'"
     )
     .bind(&req.campaign_id)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1167,7 +1167,7 @@ pub async fn claim_airdrop(data: web::Data<AppState>,
             .bind(req.wallet_id.to_string())
             .bind(c.per_claim)
             .bind(req.merkle_proof.as_ref())
-            .execute(&db.pool)
+            .execute(&data.db.pool)
             .await
             .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
             
@@ -1201,7 +1201,7 @@ pub async fn create_multisig(data: web::Data<AppState>,
     .bind(&multisig.address)
     .bind(multisig.threshold)
     .bind(multisig.total_signers)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1212,7 +1212,7 @@ pub async fn create_multisig(data: web::Data<AppState>,
             "SELECT * FROM wallets WHERE id = ?"
         )
         .bind(wallet_id.to_string())
-        .fetch_optional(&db.pool)
+        .fetch_optional(&data.db.pool)
         .await
         .ok()
         .flatten();
@@ -1225,7 +1225,7 @@ pub async fn create_multisig(data: web::Data<AppState>,
             .bind(&multisig.id)
             .bind(wallet_id.to_string())
             .bind(w.public_key)
-            .execute(&db.pool)
+            .execute(&data.db.pool)
             .await.ok();
         }
     }
@@ -1247,7 +1247,7 @@ pub async fn sign_multisig(data: web::Data<AppState>,
     .bind(&req.multisig_tx_id)
     .bind(req.signer_wallet_id.to_string())
     .bind(&req.signature)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1256,7 +1256,7 @@ pub async fn sign_multisig(data: web::Data<AppState>,
         "SELECT COUNT(*) FROM multisig_signatures WHERE multisig_tx_id = ?"
     )
     .bind(&req.multisig_tx_id)
-    .fetch_one(&db.pool)
+    .fetch_one(&data.db.pool)
     .await
     .unwrap_or(0);
     
@@ -1265,7 +1265,7 @@ pub async fn sign_multisig(data: web::Data<AppState>,
         "SELECT required_signatures FROM multisig_transactions WHERE id = ?"
     )
     .bind(&req.multisig_tx_id)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1278,7 +1278,7 @@ pub async fn sign_multisig(data: web::Data<AppState>,
             )
             .bind(count)
             .bind(&req.multisig_tx_id)
-            .execute(&db.pool)
+            .execute(&data.db.pool)
             .await.ok();
         } else {
             sqlx::query(
@@ -1286,7 +1286,7 @@ pub async fn sign_multisig(data: web::Data<AppState>,
             )
             .bind(count)
             .bind(&req.multisig_tx_id)
-            .execute(&db.pool)
+            .execute(&data.db.pool)
             .await.ok();
         }
     }
@@ -1328,7 +1328,7 @@ pub async fn create_payment_request(data: web::Data<AppState>,
     .bind(payment.qr_code_data.as_ref())
     .bind(&payment.status)
     .bind(payment.expires_at)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1378,7 +1378,7 @@ pub async fn compile_contract(data: web::Data<AppState>,
     .bind(compiled.source_code.as_ref())
     .bind(compiled.compiler_version.as_ref())
     .bind(compiled.gas_estimate)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1393,7 +1393,7 @@ pub async fn verify_contract(data: web::Data<AppState>,
         "SELECT * FROM compiled_contracts WHERE id = ?"
     )
     .bind(&req.contract_id)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1417,7 +1417,7 @@ pub async fn deploy_contract(data: web::Data<AppState>,
         "SELECT * FROM compiled_contracts WHERE id = ?"
     )
     .bind(&req.compiled_contract_id)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1438,7 +1438,7 @@ pub async fn deploy_contract(data: web::Data<AppState>,
             .bind(&req.compiled_contract_id)
             .bind(req.deployer_wallet_id.to_string())
             .bind(&address)
-            .execute(&db.pool)
+            .execute(&data.db.pool)
             .await
             .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
             
@@ -1465,7 +1465,7 @@ pub async fn generate_sdk(data: web::Data<AppState>,
         "SELECT * FROM deployed_contracts WHERE contract_id = ?"
     )
     .bind(&req.contract_id)
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1514,7 +1514,7 @@ pub async fn register_device(data: web::Data<AppState>,
     .bind(&device.device_token)
     .bind(&device.platform)
     .bind(device.app_version.as_ref())
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1557,7 +1557,7 @@ pub async fn send_notification(data: web::Data<AppState>,
         .bind(&notification.title)
         .bind(&notification.body)
         .bind(notification.data.as_ref().map(|d| d.to_string()))
-        .execute(&db.pool)
+        .execute(&data.db.pool)
         .await.ok();
         
         notifications.push(notification);
@@ -1587,7 +1587,7 @@ pub async fn enable_biometric(data: web::Data<AppState>,
     .bind(&biometric.wallet_id)
     .bind(&biometric.biometric_type)
     .bind(&biometric.public_key)
-    .execute(&db.pool)
+    .execute(&data.db.pool)
     .await
     .map_err(|e| HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())))?;
     
@@ -1602,7 +1602,7 @@ pub async fn verify_biometric(data: web::Data<AppState>,
         "SELECT public_key FROM biometric_auth WHERE wallet_id = ? AND is_enabled = TRUE"
     )
     .bind(req.wallet_id.to_string())
-    .fetch_optional(&db.pool)
+    .fetch_optional(&data.db.pool)
     .await
     .ok()
     .flatten();
@@ -1629,7 +1629,7 @@ pub async fn batch_transfer(data: web::Data<AppState>,
     req: web::Json<BatchTransferRequest>
 ) -> impl Responder {
     let start = Instant::now();
-    metrics.increment_requests();
+    data.metrics.increment_requests();
     
     if req.transfers.is_empty() {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error("No transfers provided".into()));
@@ -1668,9 +1668,9 @@ pub async fn batch_transfer(data: web::Data<AppState>,
     match BatchOperations::batch_transfer(&db, batch_items).await {
         Ok(tx_ids) => {
             let response_time = start.elapsed().as_millis() as u64;
-            metrics.record_response_time(response_time);
-            metrics.increment_success();
-            metrics.increment_transactions();
+            data.metrics.record_response_time(response_time);
+            data.metrics.increment_success();
+            data.metrics.increment_transactions();
             log::info!("Batch transfer completed: {} transactions ({}ms)", tx_ids.len(), response_time);
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "transaction_ids": tx_ids,
@@ -1690,7 +1690,7 @@ pub async fn batch_swap(data: web::Data<AppState>,
     req: web::Json<BatchSwapRequest>
 ) -> impl Responder {
     let start = Instant::now();
-    metrics.increment_requests();
+    data.metrics.increment_requests();
     
     if req.swaps.is_empty() {
         return HttpResponse::BadRequest().json(ApiResponse::<()>::error("No swaps provided".into()));
@@ -1714,9 +1714,9 @@ pub async fn batch_swap(data: web::Data<AppState>,
     match BatchOperations::batch_swap(batch_items).await {
         Ok(results) => {
             let response_time = start.elapsed().as_millis() as u64;
-            metrics.record_response_time(response_time);
-            metrics.increment_success();
-            metrics.increment_swaps();
+            data.metrics.record_response_time(response_time);
+            data.metrics.increment_success();
+            data.metrics.increment_swaps();
             log::info!("Batch swap completed: {} swaps ({}ms)", results.len(), response_time);
             HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
                 "results": results,
