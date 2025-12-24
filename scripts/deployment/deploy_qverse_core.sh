@@ -66,7 +66,8 @@ for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
         ./Cargo.toml \
         ./Cargo.lock \
         ./scripts/ \
-        "$SSH_USER@$ip:/opt/q-verse/" 2>&1 | grep -E "sent|total|error" | head -3 || true
+        "$SSH_USER@$ip:/opt/q-verse/" 2>&1 | tail -3 || true
+    echo "✅ Files synced"
     
     # 2. Build and restart on server
     echo "🔨 Building and restarting..."
