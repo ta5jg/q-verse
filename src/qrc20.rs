@@ -1,8 +1,22 @@
-use serde::{Serialize, Deserialize};
+/* ==============================================
+ * File:        src/qrc20.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   QRC-20 Token Standard
+ *
+ *   Quantum-safe and regulation-compliant token standard for Q-Verse.
+ *   Advanced token implementation with enhanced security features.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
 
-// --- QRC-20 Token Standardı ---
-// USDTgVerse'nin standart token yapısından çok daha gelişmiş,
-// Kuantum Güvenli ve Regülasyon Uyumlu yeni nesil standart.
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QRC20Token {

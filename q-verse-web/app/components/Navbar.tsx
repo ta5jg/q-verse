@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/app/components/Navbar.tsx
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Navigation Bar Component
+ *
+ *   Main navigation component with dropdown menus, user authentication
+ *   state display, and responsive mobile menu.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useState, useEffect } from "react";

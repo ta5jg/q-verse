@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/cache.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   In-Memory Cache Module
+ *
+ *   Provides TTL-based caching for prices, pools, and blocks.
+ *   Supports automatic expiration and cleanup of expired entries.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

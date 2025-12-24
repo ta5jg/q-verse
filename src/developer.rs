@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/developer.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Developer Tools Module
+ *
+ *   Contract compilation, deployment, and management services
+ *   for developers building on Q-Verse platform.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use crate::models::{CompiledContract, DeployedContract};
 use std::error::Error;
 use uuid::Uuid;

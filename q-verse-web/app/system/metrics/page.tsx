@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/app/system/metrics/page.tsx
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   System Metrics Dashboard Page
+ *
+ *   Displays real-time system metrics including request counts,
+ *   transaction statistics, and performance metrics.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useState, useEffect } from "react";

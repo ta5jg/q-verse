@@ -1,7 +1,20 @@
-/**
- * Q-Verse API Client
- * Centralized API client with error handling, retries, and caching
- */
+/* ==============================================
+ * File:        q-verse-web/lib/api.ts
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Verse API Client
+ *
+ *   Centralized API client with error handling, retries, and caching.
+ *   Provides typed methods for all backend API endpoints.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 

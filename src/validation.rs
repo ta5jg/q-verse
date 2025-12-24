@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/validation.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Input Validation Module
+ *
+ *   Validates user inputs, wallet IDs, addresses, amounts, and
+ *   other data structures to ensure data integrity.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use std::error::Error;
 use uuid::Uuid;
 

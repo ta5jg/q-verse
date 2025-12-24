@@ -1,3 +1,22 @@
+/* ==============================================
+ * File:        src/ai.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Mind: Heuristic AI Engine
+ *
+ *   Transaction analysis and anomaly detection engine.
+ *   Analyzes network transactions to detect suspicious patterns.
+ *   Future: Integration with TensorFlow/PyTorch models (onnxruntime).
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 

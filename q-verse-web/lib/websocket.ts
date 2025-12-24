@@ -1,7 +1,21 @@
-/**
- * Q-Verse WebSocket Client
- * Real-time updates for transactions, prices, blocks, etc.
- */
+/* ==============================================
+ * File:        q-verse-web/lib/websocket.ts
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Verse WebSocket Client
+ *
+ *   Real-time bidirectional communication client for Q-Verse.
+ *   Supports event subscriptions, automatic reconnection, and
+ *   real-time updates for transactions, prices, blocks, etc.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
 
 export class QVerseWebSocket {
   private ws: WebSocket | null = null;

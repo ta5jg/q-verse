@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/app/system/status/page.tsx
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   System Status Monitoring Page
+ *
+ *   Real-time monitoring of Q-Verse nodes, VM engine, P2P network,
+ *   and compliance modules. Displays network topology and system logs.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useState, useEffect } from "react";

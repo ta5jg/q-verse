@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/metrics.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   System Metrics Collection Module
+ *
+ *   Tracks and aggregates system metrics including request counts,
+ *   transaction statistics, response times, and connection states.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;

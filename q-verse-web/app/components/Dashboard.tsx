@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/app/components/Dashboard.tsx
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   User Dashboard Component
+ *
+ *   Main user dashboard displaying wallet balances, market data,
+ *   transaction history, and portfolio overview with real-time updates.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useState, useEffect } from "react";

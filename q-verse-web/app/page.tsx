@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/app/page.tsx
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-Verse Home Page
+ *
+ *   Main landing page and user registration/dashboard entry point.
+ *   Handles user authentication state and routing.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useState, useEffect } from "react";

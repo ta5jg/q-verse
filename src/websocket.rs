@@ -1,3 +1,22 @@
+/* ==============================================
+ * File:        src/websocket.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   WebSocket Handler Module
+ *
+ *   Real-time bidirectional communication handler for Q-Verse.
+ *   Supports event subscriptions, heartbeat mechanism, and
+ *   client connection management.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use actix_web::{web, HttpRequest, HttpResponse, Error};
 use actix_web_actors::ws;
 use actix::prelude::*;

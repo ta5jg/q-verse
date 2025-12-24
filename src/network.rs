@@ -1,3 +1,22 @@
+/* ==============================================
+ * File:        src/network.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   P2P Network Module (libp2p)
+ *
+ *   Peer-to-peer networking implementation using libp2p.
+ *   Supports Gossipsub pubsub, mDNS discovery, and swarm management.
+ *   Currently disabled due to stability concerns.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use libp2p::{
     gossipsub, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp, yamux, PeerId, Swarm
 };

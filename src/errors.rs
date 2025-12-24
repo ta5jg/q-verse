@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/errors.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Error Handling Module
+ *
+ *   Centralized error types and response formatting for Q-Verse API.
+ *   Provides structured error responses with appropriate HTTP status codes.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use actix_web::{HttpResponse, ResponseError};
 use serde::Serialize;
 use std::fmt;

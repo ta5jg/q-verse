@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/compliance.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Banking Compliance and ISO 20022 Module
+ *
+ *   ISO 20022 standard data structures for bank integration.
+ *   KYC/AML compliance structures and status management.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use serde::{Serialize, Deserialize};
 
 // --- ISO 20022 Standartları ---

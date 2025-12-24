@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/openapi.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   OpenAPI/Swagger Documentation Module
+ *
+ *   Auto-generated API documentation using utoipa and Swagger UI.
+ *   Provides interactive API exploration and testing interface.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 

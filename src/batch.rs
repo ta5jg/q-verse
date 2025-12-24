@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/batch.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Batch Operations Module
+ *
+ *   Processes multiple transactions atomically. Supports batch transfers
+ *   and batch swaps for efficient bulk operations.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use crate::models::{Transaction, TokenSymbol};
 use crate::db::Database;
 use std::error::Error;

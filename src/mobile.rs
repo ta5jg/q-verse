@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/mobile.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Mobile Application Support Module
+ *
+ *   Device registration, push notification management, and
+ *   mobile-specific API endpoints for iOS/Android apps.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use std::error::Error;
 use uuid::Uuid;
 

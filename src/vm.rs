@@ -1,9 +1,23 @@
+/* ==============================================
+ * File:        src/vm.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Q-VM: Quantum Virtual Machine
+ *
+ *   WebAssembly-based virtual machine for smart contract execution.
+ *   Built on Wasmer, providing secure and performant contract runtime.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use wasmer::{Store, Module, Instance, Value, Imports};
 use std::error::Error;
-
-// Q-VM: Quantum Virtual Machine
-// USDTgVerse'nin "Universal Factory" dediği şeyin çok daha güvenlisi.
-// Rust ve WASM tabanlı olduğu için, C++ veya Solidity bilen herkes buraya kontrat yazabilir.
 
 pub struct QVM {
     store: Store,

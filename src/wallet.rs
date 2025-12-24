@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/wallet.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Wallet Management Module
+ *
+ *   Multi-signature wallet support, QR code generation for payment
+ *   requests, and payment gateway handlers for Q-Verse ecosystem.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use crate::models::{MultiSigWallet, MultiSigSigner, PaymentRequest};
 use std::error::Error;
 use uuid::Uuid;

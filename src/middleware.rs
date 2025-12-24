@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/middleware.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   HTTP Middleware Module
+ *
+ *   Request/response middleware for logging, metrics collection,
+ *   and request processing pipeline.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 use actix_web::dev::{Service, Transform};
 use actix_web::web::Data;

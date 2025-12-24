@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        q-verse-web/hooks/useRealtime.ts
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Real-time Data Hooks
+ *
+ *   React hooks for subscribing to real-time data streams via WebSocket.
+ *   Includes hooks for prices, transactions, blocks, and TPS metrics.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 "use client";
 
 import { useEffect, useState } from 'react';

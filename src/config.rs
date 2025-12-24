@@ -1,3 +1,21 @@
+/* ==============================================
+ * File:        src/config.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Configuration Management Module
+ *
+ *   Loads and manages application configuration from environment
+ *   variables. Handles database URL, API ports, CORS settings, etc.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use std::env;
 use dotenv::dotenv;
 

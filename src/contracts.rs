@@ -1,5 +1,21 @@
-// 📜 Smart Contract Trait
-// Defines the standard interface for all Q-Verse Smart Contracts
+/* ==============================================
+ * File:        src/contracts.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Smart Contract Interface and Implementations
+ *
+ *   Defines the standard interface for all Q-Verse Smart Contracts.
+ *   Includes implementations for staking contracts and other
+ *   protocol-level smart contracts.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
 
 use crate::models::{Transaction, TokenSymbol};
 use std::error::Error;

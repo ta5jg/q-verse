@@ -1,29 +1,6 @@
 #!/bin/bash
 set -e
 
-# Droplets
-NYC3_IP="159.203.83.98"
-SFO2_IP="157.245.225.95"
-FRA1_IP="104.248.251.209"
-
-SSH_USER="root"
-# Find SSH Key
-if [ -f "$HOME/.ssh/id_ed25519" ]; then
-    SSH_KEY="$HOME/.ssh/id_ed25519"
-elif [ -f "$HOME/.ssh/id_rsa" ]; then
-    SSH_KEY="$HOME/.ssh/id_rsa"
-else
-    echo "❌ SSH key not found in ~/.ssh/"
-    exit 1
-fi
-
-echo "🔑 Using SSH Key: $SSH_KEY"
-
-# Create Remote Install Script
-cat << 'REMOTE_SCRIPT' > scripts/deployment/remote_install.sh
-#!/bin/bash
-set -e
-
 LOG_FILE="/var/log/qverse_deploy.log"
 echo "🚀 Starting Q-Verse Core Deployment at $(date)" > $LOG_FILE
 
@@ -96,21 +73,3 @@ systemctl enable q-verse-core
 systemctl restart q-verse-core
 
 echo "✅ Deployment Successful at $(date)!" >> $LOG_FILE
-REMOTE_SCRIPT
-
-chmod +x scripts/deployment/remote_install.sh
-
-# Deploy to Servers
-for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
-    IFS=':' read -r name ip <<< "$server"
-    echo "----------------------------------------"
-    echo "🚀 Deploying to $name ($ip)..."
-    
-    # Upload script
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 scripts/deployment/remote_install.sh "$SSH_USER@$ip":/tmp/deploy.sh || { echo "❌ Failed to upload to $name"; continue; }
-    
-    # Execute in background
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$ip" "chmod +x /tmp/deploy.sh && nohup /tmp/deploy.sh > /dev/null 2>&1 &" || { echo "❌ Failed to execute on $name"; continue; }
-    
-    echo "✅ Deployment triggered on $name. Check /var/log/qverse_deploy.log on server for progress."
-done

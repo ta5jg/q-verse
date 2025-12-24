@@ -1,3 +1,22 @@
+/* ==============================================
+ * File:        src/exchange.rs
+ * Author:      USDTG GROUP TECHNOLOGY LLC
+ * Developer:   Irfan Gedik
+ * Created Date: 2025-12-22
+ * Last Update:  2025-12-22
+ * Version:     1.0.0
+ *
+ * Description:
+ *   Decentralized Exchange (DEX) Module
+ *
+ *   Automated Market Maker (AMM) implementation using Uniswap V2-style
+ *   constant product formula (x * y = k). Includes order matching engine
+ *   for limit orders with price-time priority.
+ *
+ * License:
+ *   MIT License
+ * ============================================== */
+
 use crate::models::{LiquidityPool, Order, Trade, OrderSide, OrderType};
 use std::error::Error;
 
