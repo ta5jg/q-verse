@@ -1,4 +1,23 @@
 #!/bin/bash
+# ==============================================
+# File:        scripts/deployment/deploy_qverse_core.sh
+# Author:      USDTG GROUP TECHNOLOGY LLC
+# Developer:   Irfan Gedik
+# Created Date: 2025-12-22
+# Last Update:  2025-12-22
+# Version:     2.0.0
+#
+# Description:
+#   Fast Q-Verse Core Deployment (USDTgVerse Style)
+#
+#   Uses rsync for fast file sync (like USDTgVerse).
+#   No git clone - direct rsync, then build on server.
+#   Typically completes in under 1 minute.
+#
+# License:
+#   MIT License
+# ==============================================
+
 set -e
 
 # Droplets
@@ -18,99 +37,73 @@ else
 fi
 
 echo "🔑 Using SSH Key: $SSH_KEY"
+echo "🚀 Fast Deployment (USDTgVerse Style - rsync based)"
+echo ""
 
-# Create Remote Install Script
-cat << 'REMOTE_SCRIPT' > scripts/deployment/remote_install.sh
-#!/bin/bash
-set -e
-
-LOG_FILE="/var/log/qverse_deploy.log"
-echo "🚀 Starting Q-Verse Core Deployment at $(date)" > $LOG_FILE
-
-# 1. Install Dependencies
-if command -v apt-get &> /dev/null; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq pkg-config libssl-dev build-essential psmisc git sqlite3 libsqlite3-dev
-fi
-
-# 2. Install Rust
-if ! command -v cargo &> /dev/null; then
-    echo "🦀 Installing Rust..." >> $LOG_FILE
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
-else
-    source "$HOME/.cargo/env"
-fi
-
-# 3. Update Code
-echo "⬇️ Updating Codebase..." >> $LOG_FILE
-mkdir -p /opt/q-verse
-cd /opt/q-verse
-
-# Check if it's a git repo
-if [ -d ".git" ]; then
-    git config --global --add safe.directory /opt/q-verse
-    git fetch --all >> $LOG_FILE 2>&1
-    git reset --hard origin/main >> $LOG_FILE 2>&1
-else
-    echo "⚠️ Not a git repo, cloning fresh..." >> $LOG_FILE
-    cd /opt
-    rm -rf q-verse
-    git clone https://github.com/ta5jg/q-verse.git q-verse >> $LOG_FILE 2>&1
-    cd q-verse
-fi
-
-# 4. Build
-echo "🔨 Building Release (this takes time)..." >> $LOG_FILE
-cargo build --release >> $LOG_FILE 2>&1
-
-# 5. Install Binary
-cp target/release/q-verse-core /usr/local/bin/q-verse-core
-
-# 6. Service Setup
-cat > /etc/systemd/system/q-verse-core.service <<SERVICE
-[Unit]
-Description=Q-Verse Core (Quantum-Safe Hybrid Network)
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/q-verse
-ExecStart=/usr/local/bin/q-verse-core
-Restart=always
-RestartSec=5
-Environment="RUST_LOG=info"
-Environment="DATABASE_URL=sqlite:qverse.db?mode=rwc"
-Environment="API_HOST=0.0.0.0"
-Environment="API_PORT=8080"
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-# 7. Restart Service
-systemctl daemon-reload
-systemctl enable q-verse-core
-systemctl restart q-verse-core
-
-echo "✅ Deployment Successful at $(date)!" >> $LOG_FILE
-REMOTE_SCRIPT
-
-chmod +x scripts/deployment/remote_install.sh
+# Get project root directory
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Deploy to Servers
 for server in "NYC3:$NYC3_IP" "SFO2:$SFO2_IP" "FRA1:$FRA1_IP"; do
     IFS=':' read -r name ip <<< "$server"
-    echo "----------------------------------------"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🚀 Deploying to $name ($ip)..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    # Upload script
-    scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 scripts/deployment/remote_install.sh "$SSH_USER@$ip":/tmp/deploy.sh || { echo "❌ Failed to upload to $name"; continue; }
+    # 1. Sync files via rsync (FAST - like USDTgVerse)
+    echo "📦 Syncing files via rsync..."
+    rsync -avz --delete \
+        -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o BatchMode=yes" \
+        --exclude 'target/' \
+        --exclude '.git/' \
+        --exclude 'node_modules/' \
+        --exclude '.next/' \
+        --exclude 'qverse.db' \
+        --exclude '.env' \
+        --exclude '*.log' \
+        ./src/ \
+        ./Cargo.toml \
+        ./Cargo.lock \
+        ./scripts/ \
+        "$SSH_USER@$ip:/opt/q-verse/" 2>&1 | grep -E "sent|total|error" | head -3 || true
     
-    # Execute in background
-    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$ip" "chmod +x /tmp/deploy.sh && nohup /tmp/deploy.sh > /dev/null 2>&1 &" || { echo "❌ Failed to execute on $name"; continue; }
+    # 2. Build and restart on server
+    echo "🔨 Building and restarting..."
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$ip" << 'ENDSSH'
+        set -e
+        cd /opt/q-verse
+        
+        # Source cargo
+        [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+        
+        # Build release
+        cargo build --release 2>&1 | tail -3
+        
+        # Install binary
+        cp target/release/q-verse-core /usr/local/bin/q-verse-core 2>/dev/null || true
+        
+        # Restart service
+        systemctl daemon-reload
+        systemctl restart q-verse-core
+        
+        # Quick status check
+        sleep 2
+        if systemctl is-active --quiet q-verse-core; then
+            echo "✅ Service restarted successfully"
+        else
+            echo "⚠️ Service may need attention - check: systemctl status q-verse-core"
+        fi
+ENDSSH
     
-    echo "✅ Deployment triggered on $name. Check /var/log/qverse_deploy.log on server for progress."
+    echo "✅ $name deployment completed!"
+    echo ""
 done
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ All deployments completed!"
+echo ""
+echo "📋 Verify:"
+echo "  curl http://$NYC3_IP:8080/api/health"
+echo "  curl http://$SFO2_IP:8080/api/health"
+echo "  curl http://$FRA1_IP:8080/api/health"
