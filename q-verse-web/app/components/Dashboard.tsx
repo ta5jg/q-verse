@@ -70,7 +70,9 @@ export default function Dashboard({
     };
 
     fetchBalances();
-  }, [userData.wallet.id, qvrPrice, rglsPrice, popeoPrice, qvrgPrice]);
+    // Removed price dependencies - balances don't need to refetch when prices change
+    // Prices are updated via WebSocket in useRealtimePrice hooks
+  }, [userData.wallet.id]);
 
   // Asset Metadata with real-time prices
   const assetsList = [

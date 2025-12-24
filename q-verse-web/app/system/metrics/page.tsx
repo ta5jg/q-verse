@@ -22,7 +22,8 @@ export default function MetricsPage() {
     };
 
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 5000); // Refresh every 5 seconds
+    // Changed from 5 seconds to 30 seconds to prevent DDoS-like behavior
+    const interval = setInterval(fetchMetrics, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
 

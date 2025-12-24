@@ -12,7 +12,7 @@ export default function Navbar() {
 
   // Check Auth State (Real Check)
   useEffect(() => {
-      // Runs on client mount
+      // Runs on client mount only - no need to re-check on every navigation
       const stored = localStorage.getItem("qverse_user_data");
       if (stored) {
           try {
@@ -21,7 +21,7 @@ export default function Navbar() {
               console.error("Auth parsing error", e);
           }
       }
-  }, [pathname]); // Re-run on navigation
+  }, []); // Only run once on mount
 
   const menuItems = {
     Exchange: [
