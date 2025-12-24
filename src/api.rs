@@ -30,6 +30,7 @@ use crate::validation;
 use crate::cache::CacheManager;
 use crate::metrics::Metrics;
 use crate::batch::BatchOperations;
+use crate::middleware::check_rate_limit;
 use serde::Deserialize;
 use uuid::Uuid;
 use wasmer::Value;
@@ -279,9 +280,16 @@ pub async fn analyze_tx(
     HttpResponse::Ok().json(ApiResponse::success(analysis))
 }
 
-pub async fn stake(data: web::Data<AppState>,
+pub async fn stake(
+    data: web::Data<AppState>,
+    http_req: actix_web::HttpRequest,
     req: web::Json<StakeRequest>
 ) -> impl Responder {
+    // Rate limiting check
+    if let Err(resp) = check_rate_limit(&data.rate_limiter, &http_req).await {
+        return resp;
+    }
+    
     match data.db.stake_tokens(req.wallet_id, req.amount).await {
         Ok(_) => HttpResponse::Ok().json(ApiResponse::success("Staking Successful! 🚀")),
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(e.to_string())),
@@ -330,9 +338,16 @@ pub async fn get_metrics(
     HttpResponse::Ok().json(ApiResponse::success(data.metrics.get_stats()))
 }
 
-pub async fn create_user(data: web::Data<AppState>,
+pub async fn create_user(
+    data: web::Data<AppState>,
+    http_req: actix_web::HttpRequest,
     req: web::Json<CreateUserRequest>
 ) -> impl Responder {
+    // Rate limiting check - CRITICAL for DDoS protection
+    if let Err(resp) = check_rate_limit(&data.rate_limiter, &http_req).await {
+        return resp;
+    }
+    
     // Validate input
     if let Err(e) = validation::validate_username(&req.username) {
         log::warn!("Invalid username: {}", e);
@@ -367,8 +382,14 @@ pub async fn create_user(data: web::Data<AppState>,
 
 pub async fn get_balance(
     data: web::Data<AppState>,
+    http_req: actix_web::HttpRequest,
     path: web::Path<(Uuid, String)>
 ) -> impl Responder {
+    // Rate limiting check
+    if let Err(resp) = check_rate_limit(&data.rate_limiter, &http_req).await {
+        return resp;
+    }
+    
     let (wallet_id, token_str) = path.into_inner();
     match data.db.get_balance(wallet_id, &token_str).await {
         Ok(balance) => HttpResponse::Ok().json(ApiResponse::success(balance)),
@@ -378,8 +399,14 @@ pub async fn get_balance(
 
 pub async fn transfer(
     data: web::Data<AppState>,
+    http_req: actix_web::HttpRequest,
     req: web::Json<TransferRequest>
 ) -> impl Responder {
+    // Rate limiting check - CRITICAL for DDoS protection
+    if let Err(resp) = check_rate_limit(&data.rate_limiter, &http_req).await {
+        return resp;
+    }
+    
     let start = Instant::now();
     data.metrics.increment_requests();
     // Validate inputs
@@ -540,9 +567,16 @@ pub async fn verify_iso20022(
 
 // --- EXCHANGE HANDLERS ---
 
-pub async fn swap_tokens(data: web::Data<AppState>,
+pub async fn swap_tokens(
+    data: web::Data<AppState>,
+    http_req: actix_web::HttpRequest,
     req: web::Json<SwapRequest>
 ) -> impl Responder {
+    // Rate limiting check - CRITICAL for DDoS protection
+    if let Err(resp) = check_rate_limit(&data.rate_limiter, &http_req).await {
+        return resp;
+    }
+    
     let start = Instant::now();
     // Validate inputs
     if let Err(e) = validation::validate_wallet_id(&req.wallet_id) {

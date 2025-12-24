@@ -16,7 +16,7 @@
  *   MIT License
  * ============================================== */
 
-use actix_web::{dev::ServiceRequest, Error, HttpMessage};
+use actix_web::{dev::ServiceRequest, Error, HttpMessage, HttpRequest};
 use actix_web::dev::{Service, Transform};
 use actix_web::web::Data;
 use futures::future::{ready, Ready};
@@ -68,10 +68,30 @@ impl RateLimiter {
     }
 }
 
-// NOTE: Rate limiting middleware implementation is complex due to generic type constraints.
-// For now, rate limiting should be implemented at the handler level or via nginx/reverse proxy.
-// RateLimiter struct is available for use in individual handlers if needed.
-// TODO: Implement proper rate limiting middleware with correct generic type handling.
+/// Rate Limiting Guard - Use this in handlers to check rate limits
+/// Returns Ok(()) if allowed, Err(HttpResponse) if rate limited
+pub async fn check_rate_limit(
+    rate_limiter: &RateLimiter,
+    req: &actix_web::HttpRequest,
+) -> Result<(), actix_web::HttpResponse> {
+    let ip = req
+        .connection_info()
+        .realip_remote_addr()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    
+    if !rate_limiter.check(&ip).await {
+        log::warn!("Rate limit exceeded for IP: {}", ip);
+        return Err(actix_web::HttpResponse::TooManyRequests()
+            .json(serde_json::json!({
+                "success": false,
+                "error": "Rate limit exceeded. Please try again later.",
+                "code": "RATE_LIMIT_EXCEEDED"
+            })));
+    }
+    
+    Ok(())
+}
 
 /// Request ID Middleware - Track requests
 pub struct RequestIdMiddleware;
