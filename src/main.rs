@@ -53,7 +53,9 @@ async fn main() -> std::io::Result<()> {
     log::info!("📊 Initializing Cache & Metrics...");
     let cache = CacheManager::new();
     let metrics = Metrics::new();
-    let rate_limiter = RateLimiter::new(1000, 60); // 1000 requests per minute
+    // Increased rate limit to prevent false positives during normal usage
+    // Nginx will handle stricter limits at the edge
+    let rate_limiter = RateLimiter::new(5000, 60); // 5000 requests per minute per IP
     log::info!("✅ Cache & Metrics initialized");
 
     // 3. Start P2P Network (Temporarily disabled)
@@ -99,7 +101,7 @@ async fn main() -> std::io::Result<()> {
     // 4. Start API Server
     let bind_addr = config.bind_address();
     log::info!("🚀 Starting API Server at http://{}", bind_addr);
-    log::info!("🛡️  Security: Rate limiting enabled (1000 req/min)");
+    log::info!("🛡️  Security: Rate limiting enabled (5000 req/min, Nginx handles edge limits)");
     log::info!("⚡ Performance: Caching enabled");
     log::info!("📊 Monitoring: Metrics collection enabled");
     

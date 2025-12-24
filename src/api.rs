@@ -307,6 +307,7 @@ pub async fn stake(
 pub async fn health_check(
     data: web::Data<AppState>
 ) -> impl Responder {
+    // NO RATE LIMITING on health check - monitoring systems need constant access
     let start = Instant::now();
     data.metrics.increment_requests();
     
@@ -335,6 +336,8 @@ pub async fn health_check(
 pub async fn get_metrics(
     data: web::Data<AppState>
 ) -> impl Responder {
+    // NO RATE LIMITING on metrics - monitoring systems need access
+    // Rate limiting is handled at Nginx level with higher limits
     HttpResponse::Ok().json(ApiResponse::success(data.metrics.get_stats()))
 }
 
