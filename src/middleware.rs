@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use log;
 
-/// Rate Limiter - Token Bucket Algorithm
+/// Rate Limiter - Token Bucket Algorithm (IP-based)
 #[derive(Clone)]
 pub struct RateLimiter {
     requests: Arc<RwLock<std::collections::HashMap<String, Vec<Instant>>>>,
@@ -67,6 +67,11 @@ impl RateLimiter {
         true
     }
 }
+
+// NOTE: Rate limiting middleware implementation is complex due to generic type constraints.
+// For now, rate limiting should be implemented at the handler level or via nginx/reverse proxy.
+// RateLimiter struct is available for use in individual handlers if needed.
+// TODO: Implement proper rate limiting middleware with correct generic type handling.
 
 /// Request ID Middleware - Track requests
 pub struct RequestIdMiddleware;

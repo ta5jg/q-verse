@@ -113,6 +113,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Compress::default())
             .wrap(Logger::default())
+            // NOTE: Rate limiting should be implemented via nginx or at handler level
+            // RateLimiter is available in AppState for handler-level checks if needed
             .wrap(SecurityHeadersMiddleware)
             .wrap(RequestIdMiddleware)
             .wrap(cors)
