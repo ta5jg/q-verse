@@ -168,7 +168,7 @@ export default function Home() {
             <div className="max-w-5xl mx-auto px-6 relative z-10">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-900/30 rounded-full border border-blue-800/50 text-sm text-blue-300 mb-8 animate-bounce-slow">
                     <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-                    USDT-gVerse Bridge Now Live
+                    Quantum-Safe Network Live
                 </div>
                 
                 <h1 className="text-5xl md:text-8xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent leading-tight mb-8">
@@ -177,7 +177,7 @@ export default function Home() {
                 
                 <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed mb-12">
                     Build, trade, and earn on the world's first NIST-standard quantum-safe blockchain. 
-                    Integrating <span className="text-white font-bold">USDT-gVerse</span> for seamless stablecoin liquidity.
+                    Featuring seamless stablecoin liquidity and quantum-proof security.
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -194,13 +194,17 @@ export default function Home() {
             </div>
         </section>
 
-        {/* Stats Section */}
+        {/* Stats Section - Updated per docx analysis */}
         <section className="py-12 border-y border-gray-800/50 bg-gray-900/20">
-            <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-                <StatCard label="Total Value Locked" value="$450M+" />
-                <StatCard label="Transactions" value="12.5M" />
-                <StatCard label="Active Wallets" value="85K+" />
-                <StatCard label="Avg Block Time" value="400ms" />
+            <div className="max-w-7xl mx-auto px-6">
+                <div className="text-center">
+                    <p className="text-gray-400 text-lg italic">
+                        Metrics will be public when the system reaches autonomy.
+                    </p>
+                    <p className="text-gray-500 text-sm mt-2">
+                        Q-Verse does not seek permission. It seeks continuity.
+                    </p>
+                </div>
             </div>
         </section>
 
@@ -237,7 +241,7 @@ export default function Home() {
                 <div className="space-y-12 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
                     {[
                         { year: "Q1 2025", title: "Mainnet Launch", desc: "Genesis block, QVR Token Generation Event (TGE), and initial validator onboarding." },
-                        { year: "Q2 2025", title: "USDT-gVerse Integration", desc: "Cross-chain bridge for USDT assets and liquidity provision incentives." },
+                        { year: "Q2 2025", title: "Cross-Chain Bridge", desc: "Multi-chain bridge for seamless asset transfers and liquidity provision incentives." },
                         { year: "Q3 2025", title: "RWA Marketplace", desc: "Launch of real estate and commodities tokenization platform." },
                         { year: "Q4 2025", title: "Quantum DAO", desc: "Full decentralization of governance to the community." }
                     ].map((item, i) => (
